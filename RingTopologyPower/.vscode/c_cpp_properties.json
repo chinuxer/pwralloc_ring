@@ -1,0 +1,56 @@
+{
+    "configurations": [
+        {
+            "name": "Win32",
+            "includePath": [
+                "${workspaceFolder}/**"
+            ],
+            "defines": [
+                "_DEBUG",
+                "UNICODE",
+                "_UNICODE"
+            ],
+            "windowsSdkVersion": "10.0.22621.0",
+            "cStandard": "c17",
+            "cppStandard": "c++17",
+            "intelliSenseMode": "windows-msvc-x64",
+            "mergeConfigurations": false,
+            "recursiveIncludes": {},
+            "browse": {
+                "limitSymbolsToIncludedHeaders": true
+            },
+            "compilerPath": "cl.exe",
+            "compilerPathInCppPropertiesJson": "cl.exe"
+        },
+        {
+            "name": "QT",
+            "includePath": [
+                "${workspaceFolder}/**",
+                "${workspaceFolder}/build-*/**",
+                "C:\\Philistor\\Qt\\Qt5.12.12\\Tools\\mingw730_64\\include\\**",
+                "C:\\Philistor\\Qt\\Qt5.12.12\\5.12.12\\mingw73_64\\include\\**",
+                "C:\\Philistor\\Qt\\Qt5.12.12\\5.12.12\\mingw73_64\\include\\QtCore\\**",
+                "C:\\Philistor\\Qt\\Qt5.12.12\\5.12.12\\mingw73_64\\include\\QtGui\\**",
+                "C:\\Philistor\\Qt\\Qt5.12.12\\5.12.12\\mingw73_64\\include\\QtWidgets\\**",
+                "C:\\Philistor\\Qt\\Qt5.12.12\\5.12.12\\mingw73_64\\mkspecs\\win32-g++\\**"
+            ],
+            "defines": [
+                "_DEBUG",
+                "UNICODE",
+                "_UNICODE"
+            ],
+            "windowsSdkVersion": "10.0.22621.0",
+            "compilerPath": "C:\\Philistor\\Qt\\Qt5.12.12\\Tools\\mingw730_64\\bin\\g++.exe",
+            "cStandard": "c11",
+            "cppStandard": "c++17",
+            "intelliSenseMode": "windows-gcc-x64",
+            "compilerPathInCppPropertiesJson": "C:\\Philistor\\Qt\\Qt5.12.12\\Tools\\mingw730_64\\bin\\g++.exe",
+            "mergeConfigurations": false,
+            "recursiveIncludes": {},
+            "browse": {
+                "limitSymbolsToIncludedHeaders": true
+            }
+        }
+    ],
+    "version": 4
+}
