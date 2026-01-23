@@ -8,8 +8,9 @@
 #include "powertopology.h"
 
 QT_BEGIN_NAMESPACE
-namespace Ui {
-class MainWindow;
+namespace Ui
+{
+    class MainWindow;
 }
 QT_END_NAMESPACE
 
@@ -27,7 +28,7 @@ private slots:
     void onReleasePowerClicked();
     void onPileSelectionChanged(int index);
     void onTopologyChanged();
-    
+    void onPriorityChanged();
     // 手动操作测试
     void onAllocateNodeClicked();
     void onReleaseNodeClicked();
@@ -37,23 +38,23 @@ private:
     void updateGraphics();
     void updateStatusDisplay();
     void updatePileComboBox();
-    
+
     // 计算节点位置
     QPointF calculateNodePosition(int nodeId);
-    
+
     // 计算充电桩位置
     QPointF calculatePilePosition(int pileIndex);
-    
+
     Ui::MainWindow *ui;
     SimpleTopology *m_topology;
     QGraphicsScene *m_scene;
-    
+
     // 图形项
-    QVector<QGraphicsEllipseItem*> m_nodeItems;
-    QVector<QGraphicsLineItem*> m_contactorItems;
-    QVector<QGraphicsEllipseItem*> m_pileItems;
-    QVector<QGraphicsLineItem*> m_pileConnections;
-    
+    QVector<QGraphicsEllipseItem *> m_nodeItems;
+    QVector<QGraphicsLineItem *> m_contactorItems;
+    QVector<QGraphicsEllipseItem *> m_pileItems;
+    QVector<QGraphicsLineItem *> m_pileConnections;
+
     // 当前选中的节点和充电桩
     int m_selectedNode;
     int m_selectedPile;

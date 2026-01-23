@@ -84,6 +84,7 @@ void SimpleTopology::initialize(const TopologyConfig &config)
         pile.requiredPower = 0;
         pile.allocatedPower = 0;
         pile.color = colors[i];
+        pile.priority = 0; // 默认优先级为0
         m_piles.append(pile);
     }
 
@@ -136,14 +137,14 @@ int SimpleTopology::get_idle_node_count(const QVector<PowerNode> &nodes)
 #define NEAREST !FARTHEST
 #define BUILD_PATH true
 #define SEARCH_PATH !BUILD_PATH
-void SimpleTopology::findAvailableNodes(int pileId, int startNodeId, int quota, QVector<int> &result, bool find_type)
+int SimpleTopology::findAvailableNodes(int pileId, int startNodeId, int quota, QVector<int> &result, bool find_type)
 {
     // 使用BFS查找最近的可用节点
     int allocPower_recaller(int pileid, int startNodeId, bool find_type, bool init);
     result.clear();
     allocPower_recaller(pileId, startNodeId, find_type, BUILD_PATH); // 初始化搜索
     int entrycnt = 0;
-    while (result.size() < quota && entrycnt++< m_nodes.size())
+    while (result.size() < quota && entrycnt++ < m_nodes.size())
     {
         int currentNode = allocPower_recaller(pileId, startNodeId, find_type, SEARCH_PATH);
 
@@ -159,6 +160,7 @@ void SimpleTopology::findAvailableNodes(int pileId, int startNodeId, int quota, 
                 break;
         }
     }
+    return result.size();
 }
 bool SimpleTopology::requestPower(int pileId, int requiredPower)
 {
@@ -172,13 +174,13 @@ bool SimpleTopology::requestPower(int pileId, int requiredPower)
 
     // 记录需求功率
     int prequota = (pile.requiredPower + 39) / 40;
-    pile.requiredPower += requiredPower;
+
     pile.state = PILE_CHARGING;
 
     qDebug() << "充电桩" << pileId << "请求功率:" << requiredPower << "kW";
 
     // 计算需要多少个节点
-    int quota = (pile.requiredPower + 39) / 40 - prequota; // 功率需额增量,向上取整，每个节点40kW
+    int quota = (pile.requiredPower + requiredPower + 39) / 40 - prequota; // 功率需额增量,向上取整，每个节点40kW
     int idleNodeCount = get_idle_node_count(m_nodes);
     if (quota > idleNodeCount)
     {
@@ -188,8 +190,15 @@ bool SimpleTopology::requestPower(int pileId, int requiredPower)
 
     // 查找最近的可用节点
     QVector<int> nearestNodes;
-    findAvailableNodes(pileId, pile.connectedNode, quota, nearestNodes, NEAREST);
-
+    int res = findAvailableNodes(pileId, pile.connectedNode, quota, nearestNodes, NEAREST);
+    if (res == quota)
+    {
+        pile.requiredPower += requiredPower;
+    }
+    else
+    {
+        pile.requiredPower += res * 40;
+    }
     // 分配找到的节点
     for (int nodeId : nearestNodes)
     {
@@ -258,6 +267,9 @@ void SimpleTopology::allocateNodeToPile(int nodeId, int pileId)
     pile.allocatedNodes.insert(nodeId);
     pile.allocatedPower += node.availablePower;
 
+    // 更新接触器状态
+    updateContactorStates(pileId, 0);
+
     qDebug() << "分配节点" << nodeId << "给充电桩" << pileId;
 
     emit topologyChanged();
@@ -287,9 +299,93 @@ void SimpleTopology::releaseNodeFromPile(int nodeId, int pileId)
     pile.allocatedNodes.remove(nodeId);
     pile.allocatedPower -= node.availablePower;
 
+    // 更新接触器状态
+    updateContactorStates(pileId, nodeId);
+
     qDebug() << "从充电桩" << pileId << "释放节点" << nodeId;
 
     emit topologyChanged();
+}
+
+// 添加接触器状态更新方法
+void SimpleTopology::updateContactorStates(int pileId, int nodeId)
+{
+    if (pileId < 1 || pileId > m_piles.size())
+    {
+        return;
+    }
+    if (nodeId < 0 || nodeId > m_nodes.size())
+    {
+        return;
+    }
+    if (nodeId > 0)
+    {
+        for (Contactor &contactor : m_contactors)
+        {
+            if (contactor.node1 == nodeId || contactor.node2 == nodeId)
+            {
+                contactor.isClosed = false;
+            }
+        }
+        return;
+    }
+    const ChargingPile &pile = m_piles[pileId - 1];
+    const QSet<int> &allocatedNodes = pile.allocatedNodes;
+
+    // 收集所有相关节点（充电桩连接节点 + 已分配节点）
+    QSet<int> relevantNodes = allocatedNodes;
+
+    if (allocatedNodes.isEmpty())
+    {
+        return;
+    }
+
+    // 遍历所有接触器，检查是否连接相关节点
+    for (Contactor &contactor : m_contactors)
+    {
+        // 如果接触器连接的两个节点都在相关节点集合中，则闭合
+        if (relevantNodes.contains(contactor.node1) && relevantNodes.contains(contactor.node2))
+        {
+            // 检查这两个节点是否相邻（在已分配节点的连通子图中）
+            if (areNodesNeighbors(contactor.node1, contactor.node2))
+            {
+                contactor.isClosed = true;
+            }
+        }
+    }
+    // 遍历所有节点,如果节点左右两侧的接触器是断开的,并且和对径点都被同一个充电桩占有,则闭合对角线接触器
+    for (int allocated : allocatedNodes)
+    {
+        if (allocated < 1 || allocated > m_nodes.size())
+        {
+            continue;
+        }
+        int lastNode = allocated + m_nodes.size() - 1;
+        lastNode = (lastNode - 1) % m_nodes.size() + 1;
+        if (m_contactors[lastNode - 1].isClosed || m_contactors[allocated - 1].isClosed)
+        {
+            continue;
+        }
+        int oppositeNode = allocated + m_nodes.size() / 2;
+        oppositeNode = oppositeNode > m_nodes.size() ? oppositeNode - m_nodes.size() : oppositeNode;
+        if (allocatedNodes.contains(oppositeNode))
+        {
+            m_contactors[m_nodes.size() + allocated - 1].isClosed = true;
+            m_contactors[m_nodes.size() + oppositeNode - 1].isClosed = true;
+        }
+    }
+}
+
+// 添加辅助方法检查两个节点是否在连通子图中相连
+bool SimpleTopology::areNodesNeighbors(int node1, int node2)
+{
+    // 如果是直接相邻的节点（环形上相邻但不考虑对角线）即两个节点相差1或n-1
+    const TopologyConfig &config = m_config;
+    if (node1 == node2 - 1 || node1 == node2 + 1 || node1 == node2 - (config.nodeCount - 1) || node1 == node2 + (config.nodeCount - 1))
+    {
+        return true;
+    }
+    return false;
 }
 
 QVector<int> SimpleTopology::getNodePriority(int pileId)
@@ -351,4 +447,34 @@ void SimpleTopology::releaseNode(int nodeId)
     {
         releaseNodeFromPile(nodeId, node.chargerId);
     }
+}
+
+void SimpleTopology::setPilePriority(int pileId, int priority)
+{
+    if (pileId < 1 || pileId > m_piles.size())
+    {
+        qWarning() << "无效的充电桩ID:" << pileId;
+        return;
+    }
+
+    if (priority < 1 || priority > 4)
+    {
+        qWarning() << "优先级必须在1-4范围内:" << priority;
+        return;
+    }
+
+    m_piles[pileId - 1].priority = priority;
+    qDebug() << "充电桩" << pileId << "优先级设置为:" << priority;
+
+    emit topologyChanged();
+}
+
+int SimpleTopology::getPilePriority(int pileId) const
+{
+    if (pileId < 1 || pileId > m_piles.size())
+    {
+        return 1; // 默认优先级
+    }
+
+    return m_piles[pileId - 1].priority;
 }

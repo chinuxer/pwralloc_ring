@@ -179,6 +179,14 @@ int allocPower_recaller(int pileid, int startnodeID, bool find_type, bool init) 
 {
     if (init)
     {
+        if (config.locked[startnodeID] != 0 && config.locked[startnodeID] != pileid) // node is locked by another pile
+        {
+            for (int i = 1; i <= config.nodeCount; i++)
+            {
+                config.dist[i] = -1;
+            }
+            return -1;
+        }
         bfs(startnodeID, pileid, find_type);
         return -1;
     }

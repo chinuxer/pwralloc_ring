@@ -36,6 +36,8 @@ MainWindow::MainWindow(QWidget *parent)
             this, &MainWindow::onReleasePowerClicked);
     connect(ui->pileComboBox, QOverload<int>::of(&QComboBox::currentIndexChanged),
             this, &MainWindow::onPileSelectionChanged);
+    connect(ui->prioritySpinBox, QOverload<int>::of(&QSpinBox::valueChanged),
+            this, &MainWindow::onPriorityChanged);
     connect(ui->nodeListWidget, &QListWidget::currentRowChanged,
             [this](int row)
             { m_selectedNode = row; });
@@ -60,7 +62,6 @@ void MainWindow::onApplyConfigClicked()
 {
     int nodeCount = ui->nodeCountSpinBox->value();
     int pileCount = ui->pileCountSpinBox->value();
-
 
     // 验证配置
     if (nodeCount % 2 != 0)
@@ -131,13 +132,14 @@ void MainWindow::onApplyConfigClicked()
     setupGraphicsScene(); // 重新设置场景
     onTopologyChanged();
     void pau_init(int nodes, int piles);
-    pau_init(nodeCount,pileCount);
+    pau_init(nodeCount, pileCount);
     ui->logTextEdit->append(QString("✓ 配置已应用: %1节点, %2充电桩").arg(nodeCount).arg(pileCount));
 }
 void MainWindow::onRequestPowerClicked()
 {
     int pileId = ui->pileComboBox->currentIndex() + 1;
     int power = ui->powerSpinBox->value();
+    int priority = ui->prioritySpinBox->value();
 
     if (pileId < 1 || pileId > m_topology->getChargingPiles().size())
     {
@@ -145,16 +147,22 @@ void MainWindow::onRequestPowerClicked()
         return;
     }
 
-    // 调用算法接口（ring_bfs.c实现）
+    // 设置优先级
+    QMetaObject::invokeMethod(m_topology, "setPilePriority",
+                              Qt::QueuedConnection,
+                              Q_ARG(int, pileId),
+                              Q_ARG(int, priority));
+
+    // 调用算法接口
     bool success = m_topology->requestPower(pileId, power);
 
     if (success)
     {
-        ui->logTextEdit->append(QString("✓ 充电桩%1 请求 %2kW 功率").arg(pileId).arg(power));
+        ui->logTextEdit->append(QString("✓ 充电桩%1 (优先级%2) 请求 %3kW 功率成功").arg(pileId).arg(priority).arg(power));
     }
     else
     {
-        ui->logTextEdit->append(QString("✗ 充电桩%1 功率请求失败").arg(pileId));
+        ui->logTextEdit->append(QString("✗ 充电桩%1 (优先级%2) 功率请求失败").arg(pileId).arg(priority));
     }
 }
 
@@ -193,16 +201,36 @@ void MainWindow::onPileSelectionChanged(int index)
                     "连接节点: %3\n"
                     "需求功率: %4kW\n"
                     "已分配功率: %5kW\n"
-                    "占用节点数: %6")
+                    "占用节点数: %6\n"
+                    "优先级: %7") // 添加优先级显示
                 .arg(pile.id)
                 .arg(pile.state == PILE_CHARGING ? "充电中" : "空闲")
                 .arg(pile.connectedNode)
                 .arg(pile.requiredPower)
                 .arg(pile.allocatedPower)
-                .arg(pile.allocatedNodes.size()));
+                .arg(pile.allocatedNodes.size())
+                .arg(pile.priority));
+
+        // 同步优先级选择框的值
+        ui->prioritySpinBox->setValue(pile.priority);
     }
 }
+void MainWindow::onPriorityChanged()
+{
+    int priority = ui->prioritySpinBox->value();
 
+    if (m_selectedPile > 0)
+    {
+        // 调用拓扑类的方法设置优先级
+        // 注意：需要在 SimpleTopology 中添加 setPilePriority 方法
+        QMetaObject::invokeMethod(m_topology, "setPilePriority",
+                                  Qt::QueuedConnection,
+                                  Q_ARG(int, m_selectedPile),
+                                  Q_ARG(int, priority));
+
+        ui->logTextEdit->append(QString("→ 充电桩%1优先级更新为%2").arg(m_selectedPile).arg(priority));
+    }
+}
 void MainWindow::onTopologyChanged()
 {
     updateGraphics();
@@ -293,11 +321,11 @@ void MainWindow::setupGraphicsScene()
         // 前一半是环形接触器 <gray>，后一半是对角线接触器<darkgray>
         if (i < config.nodeCount)
         {
-            line->setPen(QPen(contactor.isClosed ? Qt::green : Qt::lightGray, 2, Qt::DashLine));
+            line->setPen(QPen(Qt::gray, 2, Qt::DashLine)); // 环形接触器
         }
         else
         {
-            line->setPen(QPen(contactor.isClosed ? Qt::green : Qt::darkGray, 1, Qt::DashLine));
+            line->setPen(QPen(Qt::darkGray, 1, Qt::DashLine)); // 对角线接触器
         }
         m_scene->addItem(line);
         m_contactorItems[i] = line;
@@ -324,7 +352,7 @@ void MainWindow::setupGraphicsScene()
         QGraphicsEllipseItem *pileItem = new QGraphicsEllipseItem(-15, -15, 30, 30);
         pileItem->setPos(pilePos);
         pileItem->setBrush(pile.color);
-        pileItem->setPen(QPen(Qt::darkBlue, 2));
+        pileItem->setPen(QPen(Qt::lightGray, 1));
         pileItem->setData(0, pile.id); // 存储充电桩ID
         m_scene->addItem(pileItem);
         m_pileItems[i] = pileItem;
@@ -334,7 +362,7 @@ void MainWindow::setupGraphicsScene()
             QString("P%1\n%2kW").arg(pile.id).arg(pile.requiredPower));
         label->setPos(pilePos.x() - 12, pilePos.y() - 12);
         label->setDefaultTextColor(Qt::black);
-        label->setFont(QFont("Arial", 9, QFont::Bold));
+        label->setFont(QFont("Arial", 10, QFont::Bold));
         m_scene->addItem(label);
 
         // 连接线
@@ -361,7 +389,7 @@ void MainWindow::updateGraphics()
     const auto &piles = m_topology->getChargingPiles();
     const auto &config = m_topology->getConfig();
 
-    // 更新节点颜色 - 添加边界检查
+    // 更新节点颜色
     for (int i = 0; i < nodes.size() && i < m_nodeItems.size(); i++)
     {
         const auto &node = nodes[i];
@@ -387,21 +415,61 @@ void MainWindow::updateGraphics()
         }
     }
 
-    // 更新接触器 - 添加边界检查
+    // 更新接触器 - 根据连接的充电桩着色
     for (int i = 0; i < contactors.size() && i < m_contactorItems.size(); i++)
     {
         if (m_contactorItems[i])
         {
+            const auto &contactor = contactors[i];
             QPen pen;
-            if (contactors[i].isClosed)
+
+            if (contactor.isClosed)
             {
-                pen = QPen(Qt::green, 3);
+                // 查找接触器连接的两个节点所属的充电桩
+                int chargerId1 = -1;
+                int chargerId2 = -1;
+
+                // 检查节点1属于哪个充电桩
+                for (const auto &pile : piles)
+                {
+                    if (pile.allocatedNodes.contains(contactor.node1))
+                    {
+                        chargerId1 = pile.id;
+                        break;
+                    }
+                }
+
+                // 检查节点2属于哪个充电桩
+                for (const auto &pile : piles)
+                {
+                    if (pile.allocatedNodes.contains(contactor.node2))
+                    {
+                        chargerId2 = pile.id;
+                        break;
+                    }
+                }
+
+                // 确定使用哪个充电桩的颜色（优先使用节点1的充电桩）
+                int chargerId = chargerId1 == chargerId2 ? chargerId1 : -1;
+
+                if (chargerId > 0 && chargerId <= piles.size())
+                {
+                    // 使用充电桩的颜色，加粗显示
+                    QColor pileColor = piles[chargerId - 1].color;
+                    pen = QPen(pileColor, 2, Qt::SolidLine);
+                }
+                else
+                {
+                    // 默认灰色
+                    pen = QPen(Qt::gray, 2, Qt::SolidLine);
+                }
             }
             else
             {
+                // 未闭合的接触器显示为灰色虚线
                 if (i < config.nodeCount)
                 {
-                    pen = QPen(Qt::gray, 2, Qt::SolidLine); // 环形接触器
+                    pen = QPen(Qt::gray, 2, Qt::DashLine); // 环形接触器
                 }
                 else
                 {
@@ -412,7 +480,26 @@ void MainWindow::updateGraphics()
         }
     }
 
-    // 更新充电桩 - 添加边界检查
+    // 更新充电桩连接线 - 根据充电桩状态着色
+    for (int i = 0; i < piles.size() && i < m_pileConnections.size(); i++)
+    {
+        if (m_pileConnections[i])
+        {
+            const auto &pile = piles[i];
+
+            // 如果充电桩有分配的节点，则连接线使用充电桩颜色
+            if (!pile.allocatedNodes.isEmpty())
+            {
+                m_pileConnections[i]->setPen(QPen(pile.color, 3, Qt::SolidLine));
+            }
+            else
+            {
+                m_pileConnections[i]->setPen(QPen(Qt::lightGray, 2, Qt::DashLine));
+            }
+        }
+    }
+
+    // 更新充电桩标签 - 添加优先级显示
     for (int i = 0; i < piles.size() && i < m_pileItems.size(); i++)
     {
         if (m_pileItems[i])
@@ -421,7 +508,7 @@ void MainWindow::updateGraphics()
 
             // 更新标签
             QPointF pos = m_pileItems[i]->pos();
-            // 移除旧标签，添加新标签
+            // 移除旧标签
             QList<QGraphicsItem *> items = m_scene->items(pos);
             for (QGraphicsItem *item : items)
             {
@@ -436,11 +523,12 @@ void MainWindow::updateGraphics()
                 }
             }
 
+            // 新标签包含优先级信息
             QGraphicsTextItem *label = new QGraphicsTextItem(
-                QString("P%1\n%2kW").arg(piles[i].id).arg(piles[i].requiredPower));
-            label->setPos(pos.x() - 12, pos.y() - 12);
-            label->setDefaultTextColor(Qt::white);
-            label->setFont(QFont("Arial", 7, QFont::Bold));
+                QString("P%1\n%2kW\n优先级%3").arg(piles[i].id).arg(piles[i].requiredPower).arg(piles[i].priority));
+            label->setPos(pos.x() - 15, pos.y() - 20);
+            label->setDefaultTextColor(Qt::black);
+            label->setFont(QFont("Arial", 12, QFont::Bold));
             m_scene->addItem(label);
         }
     }

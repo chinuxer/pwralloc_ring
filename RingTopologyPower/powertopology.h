@@ -45,6 +45,7 @@ struct Contactor
 struct ChargingPile
 {
     int id;                   // 充电桩ID
+    int priority;             // 优先级 (1-4)
     PileState state;          // 充电桩状态
     int connectedNode;        // 连接的节点ID
     int requiredPower;        // 需求功率 (kW)
@@ -104,7 +105,7 @@ public:
 
     // 接口实现 - 节点分配基础版本所需最少实现（后续可基类重写）
     int get_idle_node_count(const QVector<PowerNode> &nodes);
-    void findAvailableNodes(int pileId, int startNodeId, int quota, QVector<int> &result, bool find_type);
+    int findAvailableNodes(int pileId, int startNodeId, int quota, QVector<int> &result, bool find_type);
     bool requestPower(int pileId, int requiredPower) override;
     void releasePower(int pileId, int powerToRelease) override;
     void allocateNodeToPile(int nodeId, int pileId) override;
@@ -114,6 +115,12 @@ public:
     // 手动操作接口（用于测试）
     void allocateNode(int nodeId, int pileId);
     void releaseNode(int nodeId);
+
+    // 设置充电桩优先级
+    void setPilePriority(int pileId, int priority);
+
+    // 获取充电桩优先级
+    int getPilePriority(int pileId) const;
 
 signals:
     void topologyChanged();
@@ -126,6 +133,10 @@ private:
 
     // 生成颜色列表
     QVector<QColor> generateColors(int count);
+    // 更新接触器状态
+    void updateContactorStates(int pileId, int nodeId);
+    // 检查节点连通性
+    bool areNodesNeighbors(int node1, int node2);
 };
 
 #endif // POWERTOPOLOGY_H
