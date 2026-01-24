@@ -162,14 +162,8 @@ int SimpleTopology::findAvailableNodes(int pileId, int startNodeId, int quota, Q
     }
     return result.size();
 }
-bool SimpleTopology::requestPower(int pileId, int requiredPower)
+bool SimpleTopology::allocateNodes_auto(int pileId, int requiredPower)
 {
-    if (pileId < 1 || pileId > m_piles.size())
-    {
-        qWarning() << "无效的充电桩ID:" << pileId;
-        return false;
-    }
-
     ChargingPile &pile = m_piles[pileId - 1];
 
     // 记录需求功率
@@ -209,6 +203,38 @@ bool SimpleTopology::requestPower(int pileId, int requiredPower)
     emit topologyChanged();
 
     return !nearestNodes.isEmpty(); // 根据是否成功分配节点返回结果
+}
+
+bool SimpleTopology::requestPower(int pileId, int requiredPower)
+{
+    if (pileId < 1 || pileId > m_piles.size())
+    {
+        qWarning() << "无效的充电桩ID:" << pileId;
+        return false;
+    }
+    // 如果充电桩没有占用过节点,则首先申请充电桩自带的电气连接节点,
+    // 如果这个电气连接节点已经被其他桩占有,则尝试让其他充电桩推掉这个节点
+    ChargingPile &pile = m_piles[pileId - 1];
+    PowerNode &node = m_nodes[pile.connectedNode - 1];
+    if (pile.state == PILE_IDLE && node.state == NODE_OCCUPIED)
+    {
+        bool res = releaseNodes_manu(pile.connectedNode);
+        if (res)
+        {
+            allocateNodeToPile(pile.connectedNode, pileId);
+            pile.state = PILE_CHARGING;
+            return true;
+        }
+    }
+    else
+    {
+        bool res = allocateNodes_auto(pileId, requiredPower);
+        if (res)
+        {
+            return true;
+        }
+    }
+    return false;
 }
 
 void SimpleTopology::releasePower(int pileId, int powerToRelease)
@@ -251,7 +277,8 @@ void SimpleTopology::allocateNodeToPile(int nodeId, int pileId)
         qWarning() << "无效的节点或充电桩ID:" << nodeId << pileId;
         return;
     }
-
+    void set_locked(int pileid, int nodeid);
+    set_locked(pileId, nodeId);
     PowerNode &node = m_nodes[nodeId - 1];
     ChargingPile &pile = m_piles[pileId - 1];
 
@@ -283,7 +310,8 @@ void SimpleTopology::releaseNodeFromPile(int nodeId, int pileId)
         qWarning() << "无效的节点或充电桩ID:" << nodeId << pileId;
         return;
     }
-
+    void set_locked(int pileid, int nodeid);
+    set_locked(0, nodeId);
     PowerNode &node = m_nodes[nodeId - 1];
     ChargingPile &pile = m_piles[pileId - 1];
 
@@ -430,23 +458,48 @@ QVector<int> SimpleTopology::getNodePriority(int pileId)
 
 // 手动操作接口（测试用）
 
-void SimpleTopology::allocateNode(int nodeId, int pileId)
+void SimpleTopology::allocateNodes_manu(int nodeId, int pileId)
 {
     allocateNodeToPile(nodeId, pileId);
 }
 
-void SimpleTopology::releaseNode(int nodeId)
+bool SimpleTopology::releaseNodes_manu(int nodeId)
 {
     if (nodeId < 1 || nodeId > m_nodes.size())
     {
-        return;
+        return false;
+    }
+    PowerNode &node = m_nodes[nodeId - 1];
+    if (node.state == NODE_IDLE || node.chargerId == 0)
+    {
+        return false;
     }
 
-    PowerNode &node = m_nodes[nodeId - 1];
-    if (node.state == NODE_OCCUPIED && node.chargerId > 0)
+    // 释放nodeId节点 并且计算当前占据nodeId节点到pile连接基点的跳数
+    int pileId = node.chargerId;
+    ChargingPile &pile = m_piles[pileId - 1];
+    int get_hops_occupied(int start, int nodeid, int pileid);
+    int hops_compared = get_hops_occupied(pile.connectedNode, nodeId, pileId);
+    // 找到pileId占据的节点中到基点跳数大于hops的节点中(跳数-hops)=(节点到nodeid跳数)的节点
+    QVector<int> nodesToRelease;
+    for (int allocatedNodeId : pile.allocatedNodes)
     {
-        releaseNodeFromPile(nodeId, node.chargerId);
+        if (allocatedNodeId == nodeId)
+        {
+            continue;
+        }
+        int hops = get_hops_occupied(pile.connectedNode, allocatedNodeId, pileId);
+        if (hops > hops_compared && (hops - hops_compared) == get_hops_occupied(nodeId, allocatedNodeId, pileId))
+        {
+            nodesToRelease.append(allocatedNodeId);
+        }
     }
+    for (int allocatedNodeId : nodesToRelease)
+    {
+        releaseNodeFromPile(allocatedNodeId, pileId);
+    }
+    releaseNodeFromPile(nodeId, pileId);
+    return true;
 }
 
 void SimpleTopology::setPilePriority(int pileId, int priority)

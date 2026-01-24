@@ -99,6 +99,10 @@ static int getpilenode(int pileid)
     int nodeId = pileid * nodesPerPile + 1;
     return nodeId;
 }
+void set_locked(int pileid, int nodeid)
+{
+    config.locked[nodeid] = pileid; // 标记为已分配（锁定）
+}
 static int find_min_dist_index(int pileid, int startid)
 {
     int min_index = -1;
@@ -127,11 +131,13 @@ static int find_min_dist_index(int pileid, int startid)
     }
     if (min_index != -1)
     {
-        config.locked[min_index] = pileid; // 标记为已分配（锁定）
+        // 标记为已分配（锁定）
+        set_locked(pileid, min_index);
         config.dist[min_index] = -1;
     }
     return min_index; // 返回最小值的索引，如果没找到则返回-1
 }
+
 static int find_max_dist_index(int pileid, int startid)
 {
     int max_index = -1;
@@ -161,7 +167,8 @@ static int find_max_dist_index(int pileid, int startid)
     }
     if (max_index != -1)
     {
-        config.locked[max_index] = 0; // 标记为未分配（解锁）
+        // 标记为未分配（解锁）
+        set_locked(0, max_index);
         config.dist[max_index] = -1;
     }
     return max_index; // 返回最大值的索引，如果没找到则返回-1
@@ -175,6 +182,7 @@ static void clear_lockedarray(int pileid)
             config.locked[i] = 0;
     }
 }
+
 int allocPower_recaller(int pileid, int startnodeID, bool find_type, bool init) // find_type: 0=min, 1=max
 {
     if (init)
@@ -203,6 +211,12 @@ int allocPower_recaller(int pileid, int startnodeID, bool find_type, bool init) 
         }
         return nodeindex;
     }
+}
+
+int get_hops_occupied(int start, int nodeid, int pileid)
+{
+    bfs(start, pileid, true);
+    return config.dist[nodeid];
 }
 
 void pau_init(int nodes, int piles)

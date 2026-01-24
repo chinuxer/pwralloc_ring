@@ -106,6 +106,7 @@ public:
     // 接口实现 - 节点分配基础版本所需最少实现（后续可基类重写）
     int get_idle_node_count(const QVector<PowerNode> &nodes);
     int findAvailableNodes(int pileId, int startNodeId, int quota, QVector<int> &result, bool find_type);
+    bool allocateNodes_auto(int pileId, int requiredPower);
     bool requestPower(int pileId, int requiredPower) override;
     void releasePower(int pileId, int powerToRelease) override;
     void allocateNodeToPile(int nodeId, int pileId) override;
@@ -113,8 +114,8 @@ public:
     QVector<int> getNodePriority(int pileId) override;
 
     // 手动操作接口（用于测试）
-    void allocateNode(int nodeId, int pileId);
-    void releaseNode(int nodeId);
+    void allocateNodes_manu(int nodeId, int pileId);
+    bool releaseNodes_manu(int nodeId);
 
     // 设置充电桩优先级
     void setPilePriority(int pileId, int priority);

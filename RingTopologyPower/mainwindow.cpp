@@ -246,7 +246,7 @@ void MainWindow::onAllocateNodeClicked()
     }
 
     // 手动分配节点（测试用）
-    m_topology->allocateNode(m_selectedNode, m_selectedPile);
+    m_topology->allocateNodes_manu(m_selectedNode, m_selectedPile);
     ui->logTextEdit->append(QString("→ 手动分配: 节点%1 -> 充电桩%2").arg(m_selectedNode).arg(m_selectedPile));
 }
 
@@ -259,7 +259,7 @@ void MainWindow::onReleaseNodeClicked()
     }
 
     // 手动释放节点（测试用）
-    m_topology->releaseNode(m_selectedNode);
+    m_topology->releaseNodes_manu(m_selectedNode);
     ui->logTextEdit->append(QString("→ 手动释放: 节点%1").arg(m_selectedNode));
 }
 
@@ -286,7 +286,7 @@ void MainWindow::setupGraphicsScene()
         QGraphicsEllipseItem *item = new QGraphicsEllipseItem(-12, -12, 24, 24);
         item->setPos(pos);
         item->setBrush(Qt::lightGray);
-        item->setPen(QPen(Qt::black, 1));
+        item->setPen(QPen(Qt::darkGray, 1));
         item->setData(0, node.id); // 存储节点ID
         m_scene->addItem(item);
         m_nodeItems[i] = item;
@@ -296,6 +296,7 @@ void MainWindow::setupGraphicsScene()
         label->setPos(pos.x() - 12, pos.y() - 12);
         label->setDefaultTextColor(Qt::black);
         label->setFont(QFont("Arial", 10));
+        label->setZValue(1); // Bring labels to front
         m_scene->addItem(label);
     }
 
@@ -363,6 +364,7 @@ void MainWindow::setupGraphicsScene()
         label->setPos(pilePos.x() - 12, pilePos.y() - 12);
         label->setDefaultTextColor(Qt::black);
         label->setFont(QFont("Arial", 10, QFont::Bold));
+        label->setZValue(1); // Bring labels to front
         m_scene->addItem(label);
 
         // 连接线
@@ -496,6 +498,7 @@ void MainWindow::updateGraphics()
             {
                 m_pileConnections[i]->setPen(QPen(Qt::lightGray, 2, Qt::DashLine));
             }
+            m_pileConnections[i]->setZValue(-1);
         }
     }
 
@@ -529,6 +532,7 @@ void MainWindow::updateGraphics()
             label->setPos(pos.x() - 15, pos.y() - 20);
             label->setDefaultTextColor(Qt::black);
             label->setFont(QFont("Arial", 12, QFont::Bold));
+            label->setZValue(1); // Bring labels to front
             m_scene->addItem(label);
         }
     }
