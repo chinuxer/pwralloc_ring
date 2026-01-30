@@ -222,7 +222,6 @@ void MainWindow::onPriorityChanged()
     if (m_selectedPile > 0)
     {
         // 调用拓扑类的方法设置优先级
-        // 注意：需要在 SimpleTopology 中添加 setPilePriority 方法
         QMetaObject::invokeMethod(m_topology, "setPilePriority",
                                   Qt::QueuedConnection,
                                   Q_ARG(int, m_selectedPile),

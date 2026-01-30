@@ -107,6 +107,7 @@ public:
     int get_idle_node_count(const QVector<PowerNode> &nodes);
     int findAvailableNodes(int pileId, int startNodeId, int quota, QVector<int> &result, bool find_type);
     bool allocateNodes_auto(int pileId, int requiredPower);
+    bool preemptor(int pileId, int requiredPower);
     bool requestPower(int pileId, int requiredPower) override;
     void releasePower(int pileId, int powerToRelease) override;
     void allocateNodeToPile(int nodeId, int pileId) override;
@@ -116,7 +117,7 @@ public:
     // 手动操作接口（用于测试）
     void allocateNodes_manu(int nodeId, int pileId);
     bool releaseNodes_manu(int nodeId);
-
+public slots:
     // 设置充电桩优先级
     void setPilePriority(int pileId, int priority);
 

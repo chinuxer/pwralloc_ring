@@ -131,8 +131,6 @@ static int find_min_dist_index(int pileid, int startid)
     }
     if (min_index != -1)
     {
-        // 标记为已分配（锁定）
-        set_locked(pileid, min_index);
         config.dist[min_index] = -1;
     }
     return min_index; // 返回最小值的索引，如果没找到则返回-1
@@ -167,8 +165,6 @@ static int find_max_dist_index(int pileid, int startid)
     }
     if (max_index != -1)
     {
-        // 标记为未分配（解锁）
-        set_locked(0, max_index);
         config.dist[max_index] = -1;
     }
     return max_index; // 返回最大值的索引，如果没找到则返回-1

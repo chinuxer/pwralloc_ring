@@ -164,6 +164,11 @@ int SimpleTopology::findAvailableNodes(int pileId, int startNodeId, int quota, Q
 }
 bool SimpleTopology::allocateNodes_auto(int pileId, int requiredPower)
 {
+    if (pileId < 1 || pileId > m_piles.size())
+    {
+        qWarning() << "无效的充电桩ID:" << pileId;
+        return false;
+    }
     ChargingPile &pile = m_piles[pileId - 1];
 
     // 记录需求功率
@@ -175,12 +180,6 @@ bool SimpleTopology::allocateNodes_auto(int pileId, int requiredPower)
 
     // 计算需要多少个节点
     int quota = (pile.requiredPower + requiredPower + 39) / 40 - prequota; // 功率需额增量,向上取整，每个节点40kW
-    int idleNodeCount = get_idle_node_count(m_nodes);
-    if (quota > idleNodeCount)
-    {
-        qDebug() << "充电桩" << pileId << "请求功率:" << requiredPower << "kW" << "无法满足需求";
-        return false;
-    }
 
     // 查找最近的可用节点
     QVector<int> nearestNodes;
@@ -202,9 +201,74 @@ bool SimpleTopology::allocateNodes_auto(int pileId, int requiredPower)
     // 更新显示
     emit topologyChanged();
 
-    return !nearestNodes.isEmpty(); // 根据是否成功分配节点返回结果
+    return nearestNodes.size() == quota; // 根据是否成功分配节点返回结果
 }
+bool SimpleTopology::preemptor(int pileId, int requiredPower)
+{
+    if (pileId < 1 || pileId > m_piles.size())
+    {
+        qWarning() << "无效的充电桩ID:" << pileId;
+        return false;
+    }
+    ChargingPile &pile = m_piles[pileId - 1];
 
+    // 记录需求功率
+    int prequota = (pile.requiredPower + 39) / 40;
+
+    pile.state = PILE_CHARGING;
+
+    qDebug() << "充电桩" << pileId << "请求功率:" << requiredPower << "kW";
+
+    // 计算需要多少个节点
+    int quota = (pile.requiredPower + requiredPower + 39) / 40 - prequota; // 功率需额增量,向上取整，每个节点40kW
+
+    // 查找已占据节点中最远的节点
+    QVector<int> farthestNodes;
+    findAvailableNodes(pileId, pile.connectedNode, quota, farthestNodes, FARTHEST);
+
+    // 遍历最远的节点其周围节点是否可以抢占
+    // 加入直连基节点
+    farthestNodes.push_back(pile.connectedNode);
+    for (int nodeId : farthestNodes)
+    {
+        // 检查周围节点是否可以抢占
+        int neighbor = nodeId + 1 > m_nodes.size() ? 1 : nodeId + 1;
+        if (pile.allocatedNodes.contains(neighbor))
+        {
+            neighbor = nodeId - 1 < 1 ? m_nodes.size() : nodeId - 1;
+        }
+        if (pile.allocatedNodes.contains(neighbor))
+        {
+            neighbor = nodeId + m_nodes.size() / 2;
+            neighbor = neighbor > m_nodes.size() ? neighbor - m_nodes.size() : neighbor;
+        }
+        if (pile.allocatedNodes.contains(neighbor))
+        {
+            continue; // 两侧节点均被自己占用,跳过
+        }
+        int targetpileid = m_nodes[neighbor - 1].chargerId;
+        ChargingPile &targetpile = m_piles[targetpileid - 1];
+        if (targetpile.connectedNode == neighbor)
+        {
+            continue; // 目标充电桩的直连基节点,跳过
+        }
+
+        if (targetpile.priority < pile.priority && targetpile.allocatedNodes.size() > 1) // 目标充电桩优先级小于自己并且目标桩占据节点大于1
+        {
+            // 释放目标充电桩节点
+            releaseNodes_manu(neighbor);
+            // 分配给当前充电桩
+            allocateNodeToPile(neighbor, pileId);
+            quota--;
+        }
+        if (quota <= 0)
+        {
+            break;
+        }
+    }
+
+    emit topologyChanged();
+}
 bool SimpleTopology::requestPower(int pileId, int requiredPower)
 {
     if (pileId < 1 || pileId > m_piles.size())
@@ -232,6 +296,11 @@ bool SimpleTopology::requestPower(int pileId, int requiredPower)
         if (res)
         {
             return true;
+        }
+        else
+        {
+            // 节点分配不成功,尝试抢占/分享机制
+            return preemptor(pileId, requiredPower);
         }
     }
     return false;
