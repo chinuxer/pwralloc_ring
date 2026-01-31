@@ -5,6 +5,9 @@
 #include <QGraphicsScene>
 #include <QGraphicsEllipseItem>
 #include <QGraphicsLineItem>
+#include <QGraphicsPolygonItem>
+#include <QGraphicsOpacityEffect>
+#include <QPropertyAnimation>
 #include "powertopology.h"
 
 QT_BEGIN_NAMESPACE
@@ -44,7 +47,7 @@ private:
 
     // 计算充电桩位置
     QPointF calculatePilePosition(int pileIndex);
-
+    void drawGrid(const QRectF &rect);
     Ui::MainWindow *ui;
     SimpleTopology *m_topology;
     QGraphicsScene *m_scene;

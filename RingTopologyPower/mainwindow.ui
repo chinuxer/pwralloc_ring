@@ -16,7 +16,20 @@
   <widget class="QWidget" name="centralwidget">
    <layout class="QHBoxLayout" name="horizontalLayout">
     <item>
-     <widget class="QGraphicsView" name="graphicsView"/>
+     <widget class="QGraphicsView" name="graphicsView">
+      <property name="sizePolicy">
+       <sizepolicy hsizetype="Expanding" vsizetype="Expanding">
+        <horstretch>7</horstretch>
+        <verstretch>0</verstretch>
+       </sizepolicy>
+      </property>
+      <property name="minimumSize">
+       <size>
+        <width>800</width>
+        <height>600</height>
+       </size>
+      </property>
+     </widget>
     </item>
     <item>
      <layout class="QVBoxLayout" name="verticalLayout">
@@ -28,7 +41,7 @@
        </widget>
       </item>
       <item>
-       <layout class="QHBoxLayout" name="horizontalLayout_2">
+       <layout class="QHBoxLayout" name="horizontalLayout_nodePile">
         <item>
          <widget class="QLabel" name="label_2">
           <property name="text">
@@ -49,10 +62,6 @@
           </property>
          </widget>
         </item>
-       </layout>
-      </item>
-      <item>
-       <layout class="QHBoxLayout" name="horizontalLayout_3">
         <item>
          <widget class="QLabel" name="label_3">
           <property name="text">
@@ -66,7 +75,7 @@
            <number>1</number>
           </property>
           <property name="maximum">
-           <number>12</number>
+           <number>18</number>
           </property>
           <property name="value">
            <number>8</number>
@@ -74,13 +83,6 @@
          </widget>
         </item>
        </layout>
-      </item>
-      <item>
-       <widget class="QTextEdit" name="pileConfigTextEdit">
-        <property name="readOnly">
-         <bool>true</bool>
-        </property>
-       </widget>
       </item>
       <item>
        <widget class="QPushButton" name="applyConfigButton">
@@ -113,25 +115,25 @@
        </widget>
       </item>
       <item>
- <widget class="QLabel" name="label_9">
-  <property name="text">
-   <string>充电桩优先级:</string>
-  </property>
- </widget>
-</item>
-<item>
- <widget class="QSpinBox" name="prioritySpinBox">
-  <property name="minimum">
-   <number>1</number>
-  </property>
-  <property name="maximum">
-   <number>4</number>
-  </property>
-  <property name="value">
-   <number>1</number>
-  </property>
- </widget>
-</item>
+       <widget class="QLabel" name="label_9">
+        <property name="text">
+         <string>充电桩优先级:</string>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QSpinBox" name="prioritySpinBox">
+        <property name="minimum">
+         <number>1</number>
+        </property>
+        <property name="maximum">
+         <number>4</number>
+        </property>
+        <property name="value">
+         <number>1</number>
+        </property>
+       </widget>
+      </item>
       <item>
        <layout class="QHBoxLayout" name="horizontalLayout_4">
         <item>

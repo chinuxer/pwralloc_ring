@@ -23,28 +23,30 @@
             "compilerPathInCppPropertiesJson": "cl.exe"
         },
         {
-            "name": "QT",
+            "name": "Qt5-MinGW",
             "includePath": [
                 "${workspaceFolder}/**",
                 "${workspaceFolder}/build-*/**",
-                "C:\\Philistor\\Qt\\Qt5.12.12\\Tools\\mingw730_64\\include\\**",
-                "C:\\Philistor\\Qt\\Qt5.12.12\\5.12.12\\mingw73_64\\include\\**",
-                "C:\\Philistor\\Qt\\Qt5.12.12\\5.12.12\\mingw73_64\\include\\QtCore\\**",
-                "C:\\Philistor\\Qt\\Qt5.12.12\\5.12.12\\mingw73_64\\include\\QtGui\\**",
-                "C:\\Philistor\\Qt\\Qt5.12.12\\5.12.12\\mingw73_64\\include\\QtWidgets\\**",
-                "C:\\Philistor\\Qt\\Qt5.12.12\\5.12.12\\mingw73_64\\mkspecs\\win32-g++\\**"
+                "C:/Philistor/Qt/Qt5.12.12/Tools/mingw730_64/include/**",
+                "C:/Philistor/Qt/Qt5.12.12/5.12.12/mingw73_64/include/**",
+                "C:/Philistor/Qt/Qt5.12.12/5.12.12/mingw73_64/include/QtCore/**",
+                "C:/Philistor/Qt/Qt5.12.12/5.12.12/mingw73_64/include/QtGui/**",
+                "C:/Philistor/Qt/Qt5.12.12/5.12.12/mingw73_64/include/QtWidgets/**",
+                "C:/Philistor/Qt/Qt5.12.12/5.12.12/mingw73_64/mkspecs/win32-g++/**"
             ],
             "defines": [
                 "_DEBUG",
                 "UNICODE",
-                "_UNICODE"
+                "_UNICODE",
+                "QT_CORE_LIB",
+                "QT_WIDGETS_LIB"
             ],
             "windowsSdkVersion": "10.0.22621.0",
-            "compilerPath": "C:\\Philistor\\Qt\\Qt5.12.12\\Tools\\mingw730_64\\bin\\g++.exe",
+            "compilerPath": "C:/Philistor/Qt/Qt5.12.12/Tools/mingw730_64/bin/g++.exe",
             "cStandard": "c11",
             "cppStandard": "c++17",
             "intelliSenseMode": "windows-gcc-x64",
-            "compilerPathInCppPropertiesJson": "C:\\Philistor\\Qt\\Qt5.12.12\\Tools\\mingw730_64\\bin\\g++.exe",
+            "compilerPathInCppPropertiesJson": "C:/Philistor/Qt/Qt5.12.12/Tools/mingw730_64/bin/g++.exe",
             "mergeConfigurations": false,
             "recursiveIncludes": {},
             "browse": {

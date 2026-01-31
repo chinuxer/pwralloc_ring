@@ -5,6 +5,7 @@
 #include <QMessageBox>
 #include <QGraphicsTextItem>
 #include <cmath>
+#include <qnamespace.h>
 
 MainWindow::MainWindow(QWidget *parent)
     : QMainWindow(parent), ui(new Ui::MainWindow), m_topology(new SimpleTopology(this)), m_scene(new QGraphicsScene(this)), m_selectedNode(-1), m_selectedPile(-1)
@@ -51,6 +52,115 @@ MainWindow::MainWindow(QWidget *parent)
 
     // 初始配置
     onApplyConfigClicked();
+
+    // 在 MainWindow 构造函数中添加
+    QPalette palette;
+    QLinearGradient gradient(0, 0, 0, 800);
+    gradient.setColorAt(0, QColor(10, 10, 20)); // 深蓝黑
+    gradient.setColorAt(1, QColor(20, 25, 40)); // 蓝灰色
+    QBrush brush(gradient);
+    palette.setBrush(QPalette::Window, brush);
+    this->setPalette(palette);
+
+    QString styleSheet = R"(
+    /* 全局字体 */
+    QWidget {
+        font-family: 'Segoe UI', 'Microsoft YaHei UI';
+        font-size: 11pt;
+    }
+
+    /* 按钮样式 */
+    QPushButton {
+        background-color: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                                          stop:0 #2a82da, stop:1 #1e5ca6);
+        border: 1px solid #1e5ca6;
+        border-radius: 6px;
+        color: white;
+        padding: 8px 16px;
+        font-weight: bold;
+        text-align: center;
+    }
+
+    QPushButton:hover {
+        background-color: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                                          stop:0 #3a92ea, stop:1 #2a6cb6);
+        border: 1px solid #2a82da;
+    }
+
+    QPushButton:pressed {
+        background-color: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                                          stop:0 #1a72ca, stop:1 #0e4c96);
+    }
+
+    /* 旋钮/微调框 */
+    QSpinBox, QComboBox {
+        background-color: #1a1a2e;
+        border: 1px solid #2a82da;
+        border-radius: 4px;
+        color: #00e0ff;
+        padding: 4px;
+        selection-background-color: #2a82da;
+    }
+
+    /* 列表框 */
+    QListWidget {
+        background-color: rgba(20, 25, 40, 180);
+        border: 1px solid #2a82da;
+        border-radius: 4px;
+        color: #e0e0ff;
+        alternate-background-color: rgba(30, 35, 50, 180);
+    }
+
+    /* 文本编辑框 */
+    QTextEdit, QPlainTextEdit {
+        background-color: rgba(15, 20, 35, 200);
+        border: 1px solid #2a82da;
+        border-radius: 4px;
+        color: #a0e0ff;
+        selection-background-color: #2a82da;
+    }
+
+    /* 标签 */
+    QLabel {
+        color: #a3ccf5;
+        font-weight: bold;
+    }
+
+    /* 分组框效果 */
+    QLabel[label_1], QLabel[label_4], QLabel[label_5], QLabel[label_6],
+    QLabel[label_7], QLabel[label_8], QLabel[label_9] {
+        color: #4574bb;
+        font-size: 13pt;
+        padding: 5px;
+        border-bottom: 2px solid #2a82da;
+        margin-top: 10px;
+    }
+    QLabel[label_2], QLabel[label_3] {
+    color: #657eee;  
+    font-size: 12pt;  
+    font-weight: bold;
+}
+
+    /* 滚动条 */
+    QScrollBar:vertical {
+        background: rgba(30, 35, 50, 150);
+        width: 12px;
+        border-radius: 6px;
+    }
+
+    QScrollBar::handle:vertical {
+        background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
+                                   stop:0 #2a82da, stop:1 #00e0ff);
+        border-radius: 6px;
+        min-height: 20px;
+    }
+
+    QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {
+        height: 0px;
+    }
+)";
+
+    this->setStyleSheet(styleSheet);
 }
 
 MainWindow::~MainWindow()
@@ -107,15 +217,6 @@ void MainWindow::onApplyConfigClicked()
             pileNodes.append(nodeId);
         }
     }
-
-    // 更新配置文本框
-    QString pileConfigText;
-    for (int i = 0; i < pileNodes.size(); i++)
-    {
-        pileConfigText += QString("桩%1->节点%2\n").arg(i + 1).arg(pileNodes[i]);
-    }
-    ui->pileConfigTextEdit->setPlainText(pileConfigText);
-
     // 创建配置
     TopologyConfig config;
     config.nodeCount = nodeCount;
@@ -265,6 +366,9 @@ void MainWindow::onReleaseNodeClicked()
 void MainWindow::setupGraphicsScene()
 {
     m_scene->clear();
+    QBrush backgroundBrush(QColor(15, 20, 35));
+    m_scene->setBackgroundBrush(backgroundBrush);
+
     m_nodeItems.clear();
     m_contactorItems.clear();
     m_pileItems.clear();
@@ -361,7 +465,7 @@ void MainWindow::setupGraphicsScene()
         QGraphicsTextItem *label = new QGraphicsTextItem(
             QString("P%1\n%2kW").arg(pile.id).arg(pile.requiredPower));
         label->setPos(pilePos.x() - 12, pilePos.y() - 12);
-        label->setDefaultTextColor(Qt::black);
+        label->setDefaultTextColor(Qt::darkGray);
         label->setFont(QFont("Arial", 10, QFont::Bold));
         label->setZValue(1); // Bring labels to front
         m_scene->addItem(label);
@@ -379,7 +483,7 @@ void MainWindow::setupGraphicsScene()
     QGraphicsTextItem *title = new QGraphicsTextItem(
         QString("环形拓扑功率分配系统 - %1节点 %2充电桩").arg(config.nodeCount).arg(config.pileCount));
     title->setPos(140, 700);
-    title->setDefaultTextColor(Qt::darkBlue);
+    title->setDefaultTextColor(Qt::lightGray);
     title->setFont(QFont("Arial", 12, QFont::Bold));
     m_scene->addItem(title);
 }
@@ -529,7 +633,7 @@ void MainWindow::updateGraphics()
             QGraphicsTextItem *label = new QGraphicsTextItem(
                 QString("P%1\n%2kW\n优先级%3").arg(piles[i].id).arg(piles[i].requiredPower).arg(piles[i].priority));
             label->setPos(pos.x() - 15, pos.y() - 20);
-            label->setDefaultTextColor(Qt::black);
+            label->setDefaultTextColor(Qt::white);
             label->setFont(QFont("Arial", 12, QFont::Bold));
             label->setZValue(1); // Bring labels to front
             m_scene->addItem(label);
@@ -635,4 +739,8 @@ QPointF MainWindow::calculatePilePosition(int pileIndex)
 
     // 在节点外侧延伸
     return nodePos + direction * 80;
+}
+
+void MainWindow::drawGrid(const QRectF &r)
+{
 }
