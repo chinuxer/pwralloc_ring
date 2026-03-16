@@ -6,4 +6,5 @@
 !*.txt
 !*.ui
 !*.pro
+!*.bat
 !.gitignore
