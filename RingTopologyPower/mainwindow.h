@@ -57,6 +57,7 @@ private:
     QVector<QGraphicsLineItem *> m_contactorItems;
     QVector<QGraphicsEllipseItem *> m_pileItems;
     QVector<QGraphicsLineItem *> m_pileConnections;
+    QVector<QGraphicsTextItem *> m_pileLabelItems;
 
     // 当前选中的节点和充电桩
     int m_selectedNode;

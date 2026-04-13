@@ -373,6 +373,7 @@ void MainWindow::setupGraphicsScene()
     m_contactorItems.clear();
     m_pileItems.clear();
     m_pileConnections.clear();
+    m_pileLabelItems.clear();
 
     const auto &config = m_topology->getConfig();
     const auto &nodes = m_topology->getNodes();
@@ -438,6 +439,7 @@ void MainWindow::setupGraphicsScene()
     // 创建充电桩图形项
     m_pileItems.resize(piles.size());
     m_pileConnections.resize(piles.size());
+    m_pileLabelItems.resize(piles.size());
     for (int i = 0; i < piles.size(); i++)
     {
         const auto &pile = piles[i];
@@ -463,12 +465,33 @@ void MainWindow::setupGraphicsScene()
 
         // 充电桩标签（显示功率）
         QGraphicsTextItem *label = new QGraphicsTextItem(
-            QString("P%1\n%2kW").arg(pile.id).arg(pile.requiredPower));
+            QString("P%1").arg(pile.id).arg(pile.requiredPower));
         label->setPos(pilePos.x() - 12, pilePos.y() - 12);
-        label->setDefaultTextColor(Qt::darkGray);
+        label->setDefaultTextColor(Qt::black);
         label->setFont(QFont("Arial", 10, QFont::Bold));
         label->setZValue(1); // Bring labels to front
         m_scene->addItem(label);
+        // 亚克力框
+        QGraphicsPathItem *backgroundBox = new QGraphicsPathItem();
+        int boxWidth = 60;
+        int boxHeight = 40;
+        QPainterPath path;
+        path.addRoundedRect(QRectF(0, 0, boxWidth, boxHeight), 3, 3);
+        backgroundBox->setPath(path);
+        backgroundBox->setPos(pilePos.x() - boxWidth / 2, pilePos.y() + boxHeight / 2);
+        QBrush bgBrush(QColor(255, 255, 255, 80));
+        backgroundBox->setBrush(bgBrush);
+        QPen borderPen(QColor(255, 255, 255, 150), 1);
+        backgroundBox->setPen(borderPen);
+        m_scene->addItem(backgroundBox);
+        // 文本标签
+        QGraphicsTextItem *textlabel = new QGraphicsTextItem();
+
+        textlabel->setFont(QFont("Arial", 10, QFont::Bold));
+        textlabel->setDefaultTextColor(Qt::white);
+        textlabel->setZValue(1);
+        m_scene->addItem(textlabel);
+        m_pileLabelItems[i] = textlabel;
 
         // 连接线
         QPointF nodePos = calculateNodePosition(pile.connectedNode);
@@ -608,35 +631,19 @@ void MainWindow::updateGraphics()
     // 更新充电桩标签 - 添加优先级显示
     for (int i = 0; i < piles.size() && i < m_pileItems.size(); i++)
     {
-        if (m_pileItems[i])
+        if (m_pileItems[i] && piles[i].state == PILE_CHARGING)
         {
             m_pileItems[i]->setBrush(piles[i].color);
 
-            // 更新标签
             QPointF pos = m_pileItems[i]->pos();
-            // 移除旧标签
-            QList<QGraphicsItem *> items = m_scene->items(pos);
-            for (QGraphicsItem *item : items)
-            {
-                if (QGraphicsTextItem *textItem = dynamic_cast<QGraphicsTextItem *>(item))
-                {
-                    if (textItem->toPlainText().contains(QString("P%1").arg(piles[i].id)))
-                    {
-                        m_scene->removeItem(textItem);
-                        delete textItem;
-                        break;
-                    }
-                }
-            }
 
-            // 新标签包含优先级信息
-            QGraphicsTextItem *label = new QGraphicsTextItem(
-                QString("P%1\n%2kW\n优先级%3").arg(piles[i].id).arg(piles[i].requiredPower).arg(piles[i].priority));
-            label->setPos(pos.x() - 15, pos.y() - 20);
-            label->setDefaultTextColor(Qt::white);
-            label->setFont(QFont("Arial", 12, QFont::Bold));
-            label->setZValue(1); // Bring labels to front
-            m_scene->addItem(label);
+            m_pileLabelItems[i]->setPos(pos.x() - 20, pos.y() + 20);
+
+            // 使用 setPlainText() 或 setHtml() 来更新文本
+            QString labelText = QString("%1kW\n%2级")
+                                    .arg(piles[i].requiredPower)
+                                    .arg(piles[i].priority);
+            m_pileLabelItems[i]->setPlainText(labelText);
         }
     }
 }

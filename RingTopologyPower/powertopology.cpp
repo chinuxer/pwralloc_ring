@@ -271,9 +271,28 @@ bool SimpleTopology::preemptor(int pileId, int requiredPower)
 }
 bool SimpleTopology::requestPower(int pileId, int requiredPower)
 {
-    if (pileId < 1 || pileId > m_piles.size())
+        if (pileId < 1 || pileId > m_piles.size())
     {
         qWarning() << "无效的充电桩ID:" << pileId;
+        return false;
+    }
+    int availableNodesNum = 0;
+    for (int i = 0; i < m_nodes.size(); ++i)
+    {
+        if (m_nodes[i].state == NODE_IDLE)
+        {
+            availableNodesNum++;
+        }
+    }
+    if (availableNodesNum == 0)
+    {
+        qWarning() << "没有可用节点";
+        return false;
+    }
+
+    if (requiredPower < 0 || requiredPower > availableNodesNum * 40)
+    {
+        qWarning() << "无效的功率请求:" << requiredPower;
         return false;
     }
     // 如果充电桩没有占用过节点,则首先申请充电桩自带的电气连接节点,
@@ -311,6 +330,17 @@ void SimpleTopology::releasePower(int pileId, int powerToRelease)
     if (pileId < 1 || pileId > m_piles.size())
     {
         qWarning() << "无效的充电桩ID:" << pileId;
+        return;
+    }
+    int occupiedNodesNum = m_piles[pileId - 1].allocatedNodes.size();
+    if (occupiedNodesNum == 0)
+    {
+        qWarning() << "充电桩" << pileId << "没有节点占用";
+        return;
+    }
+    if ((powerToRelease + 39) / 40 > m_piles[pileId - 1].allocatedNodes.size())
+    {
+        qWarning() << "充电桩" << pileId << "节点数is" << m_piles[pileId - 1].allocatedPower << "，释放功率" << powerToRelease << "超出范围";
         return;
     }
 
