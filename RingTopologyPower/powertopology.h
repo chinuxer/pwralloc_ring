@@ -6,7 +6,8 @@
 #include <QSet>
 #include <QPointF>
 #include <QColor>
-
+#include <QJsonObject>
+#include <QJsonArray>
 // 节点状态
 enum NodeState
 {
@@ -112,8 +113,11 @@ public:
     void releasePower(int pileId, int powerToRelease) override;
     void allocateNodeToPile(int nodeId, int pileId) override;
     void releaseNodeFromPile(int nodeId, int pileId) override;
+    void maneuver_ReleasedNodes(int pileId, const QVector<int> &nodeIds_to_release);
     QVector<int> getNodePriority(int pileId) override;
-
+    void getNeighbors(int nodeId, QVector<int> &result);
+    QJsonObject saveState() const;
+    bool loadState(const QJsonObject &state);
     // 手动操作接口（用于测试）
     void allocateNodes_manu(int nodeId, int pileId);
     bool releaseNodes_manu(int nodeId);

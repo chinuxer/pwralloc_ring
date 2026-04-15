@@ -35,6 +35,8 @@ private slots:
     // 手动操作测试
     void onAllocateNodeClicked();
     void onReleaseNodeClicked();
+    void onSaveStateClicked();
+    void onLoadStateClicked();
 
 private:
     void setupGraphicsScene();

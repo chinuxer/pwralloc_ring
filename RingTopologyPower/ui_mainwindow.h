@@ -53,12 +53,15 @@ public:
     QHBoxLayout *horizontalLayout_5;
     QPushButton *allocateNodeButton;
     QPushButton *releaseNodeButton;
+    QHBoxLayout *horizontalLayout_6;
     QLabel *label_6;
     QTextEdit *pileInfoTextEdit;
     QLabel *label_7;
     QTextEdit *statusTextEdit;
     QLabel *label_8;
     QTextEdit *logTextEdit;
+    QPushButton *saveStateButton;
+    QPushButton *loadStateButton;
 
     void setupUi(QMainWindow *MainWindow)
     {
@@ -212,6 +215,20 @@ public:
 
         verticalLayout->addWidget(logTextEdit);
 
+        horizontalLayout_6 = new QHBoxLayout();
+        horizontalLayout_6->setObjectName(QString::fromUtf8("horizontalLayout_6"));
+        saveStateButton = new QPushButton(centralwidget);
+        saveStateButton->setObjectName(QString::fromUtf8("saveStateButton"));
+
+        horizontalLayout_6->addWidget(saveStateButton);
+
+        loadStateButton = new QPushButton(centralwidget);
+        loadStateButton->setObjectName(QString::fromUtf8("loadStateButton"));
+
+        horizontalLayout_6->addWidget(loadStateButton);
+
+        verticalLayout->addLayout(horizontalLayout_6);
+
         horizontalLayout->addLayout(verticalLayout);
 
         MainWindow->setCentralWidget(centralwidget);
@@ -239,6 +256,8 @@ public:
         label_6->setText(QApplication::translate("MainWindow", "\345\205\205\347\224\265\346\241\251\344\277\241\346\201\257", nullptr));
         label_7->setText(QApplication::translate("MainWindow", "\347\263\273\347\273\237\347\212\266\346\200\201", nullptr));
         label_8->setText(QApplication::translate("MainWindow", "\346\223\215\344\275\234\346\227\245\345\277\227", nullptr));
+        saveStateButton->setText(QApplication::translate("MainWindow", "保存工况", nullptr));
+        loadStateButton->setText(QApplication::translate("MainWindow", "加载工况", nullptr));
     } // retranslateUi
 };
 

@@ -6,6 +6,9 @@
 #include <QGraphicsTextItem>
 #include <cmath>
 #include <qnamespace.h>
+#include <QFileDialog>
+#include <QJsonDocument>
+#include <QJsonObject>
 
 MainWindow::MainWindow(QWidget *parent)
     : QMainWindow(parent), ui(new Ui::MainWindow), m_topology(new SimpleTopology(this)), m_scene(new QGraphicsScene(this)), m_selectedNode(-1), m_selectedPile(-1)
@@ -49,7 +52,8 @@ MainWindow::MainWindow(QWidget *parent)
 
     connect(m_topology, &SimpleTopology::topologyChanged,
             this, &MainWindow::onTopologyChanged);
-
+    connect(ui->saveStateButton, &QPushButton::clicked, this, &MainWindow::onSaveStateClicked);
+    connect(ui->loadStateButton, &QPushButton::clicked, this, &MainWindow::onLoadStateClicked);
     // 初始配置
     onApplyConfigClicked();
 
@@ -363,6 +367,63 @@ void MainWindow::onReleaseNodeClicked()
     ui->logTextEdit->append(QString("→ 手动释放: 节点%1").arg(m_selectedNode));
 }
 
+void MainWindow::onSaveStateClicked()
+{
+    QString fileName = QFileDialog::getSaveFileName(this,
+                                                    tr("保存工况"), QString(),
+                                                    tr("工况文件 (*.json);;所有文件 (*)"));
+    if (fileName.isEmpty())
+        return;
+
+    QJsonObject state = m_topology->saveState();
+    QJsonDocument doc(state);
+    QFile file(fileName);
+    if (!file.open(QIODevice::WriteOnly))
+    {
+        QMessageBox::warning(this, "错误", "无法写入文件");
+        return;
+    }
+    file.write(doc.toJson());
+    file.close();
+    ui->logTextEdit->append(QString("✓ 工况已保存至 %1").arg(fileName));
+}
+void MainWindow::onLoadStateClicked()
+{
+    QString fileName = QFileDialog::getOpenFileName(this,
+                                                    tr("加载工况"), QString(),
+                                                    tr("工况文件 (*.json);;所有文件 (*)"));
+    if (fileName.isEmpty())
+        return;
+
+    QFile file(fileName);
+    if (!file.open(QIODevice::ReadOnly))
+    {
+        QMessageBox::warning(this, "错误", "无法读取文件");
+        return;
+    }
+    QByteArray data = file.readAll();
+    file.close();
+
+    QJsonDocument doc = QJsonDocument::fromJson(data);
+    if (doc.isNull())
+    {
+        QMessageBox::warning(this, "错误", "无效的JSON文件");
+        return;
+    }
+
+    bool ok = m_topology->loadState(doc.object());
+    if (ok)
+    {
+        ui->logTextEdit->append(QString("✓ 已从 %1 加载工况").arg(fileName));
+        // 刷新UI显示
+        updatePileComboBox();
+        onTopologyChanged(); // 会刷新图形和状态文本
+    }
+    else
+    {
+        QMessageBox::warning(this, "错误", "工况加载失败：配置不匹配或数据损坏");
+    }
+}
 void MainWindow::setupGraphicsScene()
 {
     m_scene->clear();
@@ -504,10 +565,10 @@ void MainWindow::setupGraphicsScene()
 
     // 标题
     QGraphicsTextItem *title = new QGraphicsTextItem(
-        QString("环形拓扑功率分配系统 - %1节点 %2充电桩").arg(config.nodeCount).arg(config.pileCount));
+        QString("%1kW环形拓扑功率分配演示系统  %2节点 %3充电桩").arg(config.nodeCount * 40).arg(config.nodeCount).arg(config.pileCount));
     title->setPos(140, 700);
     title->setDefaultTextColor(Qt::lightGray);
-    title->setFont(QFont("Arial", 12, QFont::Bold));
+    title->setFont(QFont("Arial", 11, QFont::Bold));
     m_scene->addItem(title);
 }
 void MainWindow::updateGraphics()
@@ -631,18 +692,21 @@ void MainWindow::updateGraphics()
     // 更新充电桩标签 - 添加优先级显示
     for (int i = 0; i < piles.size() && i < m_pileItems.size(); i++)
     {
+        m_pileItems[i]->setBrush(piles[i].color);
+        QPointF pos = m_pileItems[i]->pos();
+        m_pileLabelItems[i]->setPos(pos.x() - 24, pos.y() + 20);
         if (m_pileItems[i] && piles[i].state == PILE_CHARGING)
         {
-            m_pileItems[i]->setBrush(piles[i].color);
-
-            QPointF pos = m_pileItems[i]->pos();
-
-            m_pileLabelItems[i]->setPos(pos.x() - 20, pos.y() + 20);
-
             // 使用 setPlainText() 或 setHtml() 来更新文本
-            QString labelText = QString("%1kW\n%2级")
+            QString labelText = QString("%1:%2\n%3级")
+                                    .arg(piles[i].allocatedPower)
                                     .arg(piles[i].requiredPower)
                                     .arg(piles[i].priority);
+            m_pileLabelItems[i]->setPlainText(labelText);
+        }
+        else if (m_pileItems[i] && piles[i].state == PILE_IDLE)
+        {
+            QString labelText = QString("- : -\n-");
             m_pileLabelItems[i]->setPlainText(labelText);
         }
     }
