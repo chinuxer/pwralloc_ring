@@ -25,7 +25,7 @@ void SimpleTopology::initialize(const TopologyConfig &config)
         PowerNode node;
         node.id = i;
         node.state = NODE_IDLE;
-        node.availablePower = 40; // 每个节点40kW
+        node.availablePower = config.unitPower; // 每个节点额定功率
         node.chargerId = -1;
         node.position = QPointF(); // 位置由UI计算
         m_nodes.append(node);
@@ -84,38 +84,39 @@ void SimpleTopology::initialize(const TopologyConfig &config)
         pile.connectedNode = connectedNode;
 
         pile.requiredPower = 0;
-        pile.allocatedPower = 0;
+        pile.requiredNodes = 0;
         pile.color = colors[i];
         pile.priority = 0; // 默认优先级为0
         m_piles.append(pile);
     }
 
-    qDebug() << "拓扑初始化完成:" << config.nodeCount << "节点,"
-             << config.pileCount << "充电桩";
-    qDebug() << "环形接触器:" << config.nodeCount << "个";
-    qDebug() << "对角线接触器:" << config.nodeCount << "个";
-    qDebug() << "总接触器:" << m_contactors.size() << "个";
+    qInfo() << "拓扑初始化完成:" << config.nodeCount << "节点,"
+            << config.pileCount << "充电桩";
+    qInfo() << "环形接触器:" << config.nodeCount << "个";
+    qInfo() << "对角线接触器:" << config.nodeCount << "个";
+    qInfo() << "总接触器:" << m_contactors.size() << "个";
 }
 QVector<QColor> SimpleTopology::generateColors(int count)
 {
     QVector<QColor> colors;
     QColor baseColors[] = {
-        QColor(255, 100, 100), // 红色
-        QColor(100, 255, 100), // 绿色
-        QColor(100, 100, 255), // 蓝色
+        QColor(205, 20, 30),   // 红色
+        QColor(215, 110, 15),  // 橙色
         QColor(255, 255, 100), // 黄色
-        QColor(255, 100, 255), // 紫色
+        QColor(100, 255, 100), // 绿色
         QColor(100, 255, 255), // 青色
-        QColor(255, 150, 100), // 橙色
+        QColor(100, 125, 255), // 蓝色
+        QColor(50, 25, 120),   // 紫色
+        QColor(255, 50, 225),  // 洋红色
+        QColor(65, 160, 140),  // 海蓝
+        QColor(130, 130, 100), // 松青
+        QColor(255, 60, 120),  // 深红/猩红 (更强烈的红色)
+        QColor(50, 200, 200),  // 深青/绿松石 (更鲜明的青色)
         QColor(150, 100, 255), // 靛色
         QColor(255, 200, 100), // 琥珀色
-        QColor(200, 100, 255), // 洋红色
-        QColor(100, 200, 255), // 天蓝色
         QColor(200, 255, 100), // 酸橙色
-        QColor(255, 50, 50),   // 深红/猩红 (更强烈的红色)
-        QColor(50, 200, 50),   // 深绿/石灰绿 (更鲜明的绿色)
-        QColor(50, 200, 200),  // 深青/绿松石 (更鲜明的青色)
-        QColor(255, 100, 180)  // 粉色 (补充洋红与红之间的色系)
+        QColor(50, 40, 30),    // 棕色
+
     };
 
     for (int i = 0; i < count; i++)
@@ -168,7 +169,7 @@ int SimpleTopology::findAvailableNodes(int pileId, int startNodeId, int quota, Q
     }
     return result.size();
 }
-bool SimpleTopology::allocateNodes_auto(int pileId, int requiredPower)
+bool SimpleTopology::allocateNodes_auto(int pileId, int quota)
 {
     if (pileId < 1 || pileId > m_piles.size())
     {
@@ -179,16 +180,15 @@ bool SimpleTopology::allocateNodes_auto(int pileId, int requiredPower)
 
     pile.state = PILE_CHARGING;
 
-    qDebug() << "充电桩" << pileId << "请求功率:" << requiredPower << "kW";
+    qInfo() << "充电桩" << pileId << "请求功率节点:" << quota;
 
-    // 计算需要多少个节点
-    int quota = (pile.requiredPower + requiredPower + 39) / 40 - pile.allocatedNodes.size(); // 功率需额增量,向上取整，每个节点40kW
-    quota = qMax(quota, 0);
     if (quota == 0)
     {
-        qDebug() << "充电桩" << pileId << "无需分配节点";
+        qInfo() << "充电桩" << pileId << "无需分配节点";
         return true;
     }
+    quota = quota - pile.allocatedNodes.size();
+    quota = qMax(quota, 0);
     // 查找最近的可用节点
     QVector<int> nearestNodes;
     int res = findAvailableNodes(pileId, pile.connectedNode, quota, nearestNodes, NEAREST);
@@ -236,67 +236,243 @@ void SimpleTopology::getNeighbors(int nodeId, QVector<int> &result)
     }
 }
 
-void SimpleTopology::maneuver_ReleasedNodes(int pileId, const QVector<int> &nodeIds_to_release)
+int SimpleTopology::makesScores(Senario senario, int pileId, int neighborPileId, int nodeId, int neighborNodeId)
 {
+#define WEIGHT_HIERARCHY 10
+#define WEIGHT_1 1
+#define WEIGHT_2 WEIGHT_HIERARCHY *WEIGHT_1
+#define WEIGHT_3 WEIGHT_HIERARCHY *WEIGHT_2
+#define WEIGHT_4 WEIGHT_HIERARCHY *WEIGHT_3
+#define WEIGHT_5 WEIGHT_HIERARCHY *WEIGHT_4
+#define WEIGHT_6 WEIGHT_HIERARCHY *WEIGHT_5
+#define WEIGHT_7 WEIGHT_HIERARCHY *WEIGHT_6
+#define WEIGHT_8 WEIGHT_HIERARCHY *WEIGHT_7
+#define WEIGHT_9 WEIGHT_HIERARCHY *WEIGHT_8
+#define WEIGHT_10 WEIGHT_HIERARCHY *WEIGHT_9
     if (pileId < 1 || pileId > m_piles.size())
     {
         qWarning() << "无效的充电桩ID:" << pileId;
+        return -1;
     }
-    if (nodeIds_to_release.isEmpty())
+    if (neighborPileId < 1 || neighborPileId > m_piles.size())
     {
-        qWarning() << "没有指定要释放的节点";
-        return;
+        qWarning() << "无效的邻居充电桩ID:" << neighborPileId;
+        return -1;
     }
-    for (int nodeId : nodeIds_to_release)
+    if (nodeId < 1 || nodeId > m_nodes.size())
     {
-        // 遍历释放节点中是否有邻接功率欠额的充电桩占据节点
+        qWarning() << "无效的节点ID:" << nodeId;
+        return -1;
+    }
+    if (neighborNodeId < 1 || neighborNodeId > m_nodes.size())
+    {
+        qWarning() << "无效的邻居节点ID:" << neighborNodeId;
+        return -1;
+    }
+
+    int get_hops_occupied(int start, int nodeid, int pileid);
+    int score = 0;
+    switch (senario)
+    {
+    case SENARIO_INHERIT:
+        score += WEIGHT_1 * m_piles[neighborPileId - 1].allocatedNodes.size();
+        score += WEIGHT_3 * (WEIGHT_HIERARCHY - m_piles[neighborPileId - 1].priority % WEIGHT_HIERARCHY);
+        score += WEIGHT_4 * ((m_piles[neighborPileId - 1].requiredNodes - m_piles[neighborPileId - 1].allocatedNodes.size()) % WEIGHT_HIERARCHY);
+        score = (pileId == neighborPileId) ? 0 : score; // 如果邻居节点所属充电桩与当前充电桩相同,则得分为0,不进行继承
+        return score;
+    case SENARIO_PREEMPT:
+        score += WEIGHT_1 * m_piles[neighborPileId - 1].allocatedNodes.size();                                                                  // 已分配节点数越多得分越高
+        score += WEIGHT_3 * (m_piles[neighborPileId - 1].requiredNodes - m_piles[neighborPileId - 1].allocatedNodes.size()) % WEIGHT_HIERARCHY; // 功率缺额越大得分越高
+        score += WEIGHT_4 * (WEIGHT_HIERARCHY - m_piles[neighborPileId - 1].priority % WEIGHT_HIERARCHY);                                       // 优先级越低得分越高
+        int hops = get_hops_occupied(nodeId, m_piles[pileId - 1].connectedNode, pileId);
+        hops = hops >= WEIGHT_HIERARCHY ? (WEIGHT_HIERARCHY - 1) : hops;
+        score += WEIGHT_5 * (WEIGHT_HIERARCHY - 1 - hops); // 距离越近得分越高
+        // neighborNodeId的邻居节点中有多少于neighborNodeId的所属充电桩id相同的
         QVector<int> neighbors;
         neighbors.clear();
 
         getNeighbors(nodeId, neighbors);
-        QVector<int> scores;
-        scores.clear();
-        if (neighbors.size() <= 0)
-        {
-            qWarning() << "节点" << nodeId << "没有邻居节点";
-            continue;
-        }
+        int neighbor_same_pile_count = 0;
         for (int neighbor : neighbors)
         {
-            int neighborPileId = m_nodes[neighbor - 1].chargerId;
+            if (m_nodes[neighbor - 1].chargerId == neighborPileId)
+            {
+                neighbor_same_pile_count++;
+            }
+        }
+        score += WEIGHT_6 * (neighbor_same_pile_count % WEIGHT_HIERARCHY);
+        hops = get_hops_occupied(neighborNodeId, m_piles[neighborPileId - 1].connectedNode, neighborPileId);
+        score += WEIGHT_7 * (hops % WEIGHT_HIERARCHY);                                                     // 距离越远得分越高
+        score += WEIGHT_8 * (m_piles[neighborPileId - 1].priority < m_piles[pileId - 1].priority ? 1 : 0); // 如果邻居充电桩优先级低于充电桩优先级，则可抢占
+        return score;
+    }
+}
 
-            if (neighborPileId > 0 && neighborPileId != pileId)
+/*继承策略:在所有空节点中进行遍历,找到每个空节点的邻节点所属充电桩,按继承策略的优先级权重组合计算分数,如果空节点个数不大于得分最高充电桩所欠额功率quota,则直接把所有空节点分配给这个充电桩;如果空节点个数大于得分最高充电桩所欠额功率quota,则继续找到得分第二高的充电桩,并把所有空节点分配给这个充电桩;如果得分第二高的充电桩所欠额功率quota不大于(空节点个数-得分最高充电桩所欠额功率quota),则先让得分第二高的充电桩对空节点进行抢占,然后再让得分第一高的充电桩再次对所有空节点和得分第二高的充电桩所抢占的节点进行抢占,直到满足缺额或者无法获得所有节点都抢占完或得分第二高的充电桩抢占过的空节点仅剩一个点;以此类推*/
+void SimpleTopology::inheritor(int pileId, const QVector<int> &nodeIds_to_release)
+{
+
+    if (nodeIds_to_release.isEmpty())
+    {
+        qWarning() << "没有可继承的节点";
+        return;
+    }
+    // 1. 计算每个充电桩的得分
+    // 遍历nodeIds_to_release,找到每个节点的邻节点所属充电桩,并计算每个充电桩的得分
+
+    for (int nodeId : nodeIds_to_release)
+    {
+        QVector<int> pileScores;
+        pileScores.resize(m_piles.size());
+        pileScores.fill(-1);
+        QVector<int> neighbors;
+        neighbors.clear();
+        getNeighbors(nodeId, neighbors);
+        for (int neighborId : neighbors)
+        {
+            int neighborPileId = m_nodes[neighborId - 1].chargerId;
+            if (neighborPileId < 1 || neighborPileId > m_piles.size())
             {
-                if (m_piles[neighborPileId - 1].allocatedPower < m_piles[neighborPileId - 1].requiredPower) // 功率欠额
-                {
-                    int score_node = 0;
-                    score_node = (m_piles[neighborPileId - 1].requiredPower - m_piles[neighborPileId - 1].allocatedPower) * 1000;
-                    score_node += m_piles[neighborPileId - 1].priority * 100;
-                    score_node += m_piles[neighborPileId - 1].allocatedNodes.size() * 1;
-                    scores.append(score_node);
-                }
+                continue;
+            }
+            int score = makesScores(SENARIO_INHERIT, pileId, neighborPileId, nodeId, neighborId);
+            if (pileScores[neighborPileId - 1] == -1)
+            {
+                pileScores[neighborPileId - 1] = score;
+                qInfo() << "充电桩" << neighborPileId << "得分:" << score;
             }
         }
-        // 找到分值最高的邻居节点,如果分值大于0则把这个节点分配给这个充电桩
+        int bestPileId = 0;
         int bestScore = -1;
-        int bestNeighborPileId = -1;
-        for (int i = 0; i < scores.size(); i++)
+        for (int i = 0; i < pileScores.size(); ++i)
         {
-            if (scores[i] > bestScore)
+            if (pileScores[i] > bestScore)
             {
-                bestScore = scores[i];
-                bestNeighborPileId = neighbors[i];
-                bestNeighborPileId = m_nodes[bestNeighborPileId - 1].chargerId;
+                bestScore = pileScores[i];
+                bestPileId = i + 1;
             }
         }
-        if (bestScore > 0 && bestNeighborPileId >= 1 && bestNeighborPileId <= m_piles.size())
+        if (bestScore < WEIGHT_4 * 1) // 如果没有充电桩有功率缺口)
         {
-            qDebug() << "节点" << nodeId << "重新分配给充电桩" << bestNeighborPileId << "分值:" << bestScore << "\n";
-            allocateNodeToPile(nodeId, bestNeighborPileId);
+            qWarning() << "没有得分符合标准的充电桩";
+            continue;
+        }
+        if (bestPileId > 0)
+        {
+            qInfo() << "继承策略结果:充电桩" << bestPileId << "继承节点" << nodeId << "得分:" << bestScore;
+            allocateNodeToPile(nodeId, bestPileId);
         }
     }
 }
-bool SimpleTopology::preemptor(int pileId, int requiredPower)
+
+// 遍历释放节点中是否有特征节点(特征为三个邻节点中有与释放节点所属充电桩id相同的节点,有一个是空节点,有一个占用桩存在功率欠额大于等于两个节点)
+bool SimpleTopology::maneuver_ReleasedNodes(int pileId, const QVector<int> &nodeIds_to_release)
+{
+    if (pileId < 1 || pileId > m_piles.size())
+    {
+        qWarning() << "无效的充电桩ID:" << pileId;
+        return false;
+    }
+    if (nodeIds_to_release.isEmpty())
+    {
+        qWarning() << "没有指定要释放的节点";
+        return false;
+    }
+
+    const int MIN_DEFICIT_NODES = 2;
+
+    // To store candidate piles that have sufficient deficit
+    struct CandidateNode
+    {
+        int id;
+        int pileId;
+        int deficit;
+        int priority;
+    };
+    QVector<CandidateNode> CandidateNodes;
+    for (int nodeId : nodeIds_to_release)
+    {
+        int deficit = 0;
+        int priority = 0;
+        int occupiedPileId = 0;
+        // 1. Get the 3 neighbors of the released node
+        QVector<int>
+            neighbors;
+        getNeighbors(nodeId, neighbors);
+
+        if (neighbors.size() != 3)
+        {
+            continue; // Should not happen in a valid ring topology with diagonals
+        }
+
+        // 2. Analyze neighbors to check for the specific features
+        bool hasSamePileNeighbor = false;
+        bool hasIdleNeighbor = false;
+        bool hasSignificantDeficit = false;
+
+        for (int neighborId : neighbors)
+        {
+            if (neighborId < 1 || neighborId > m_nodes.size())
+                continue;
+
+            PowerNode &neighborNode = m_nodes[neighborId - 1];
+            occupiedPileId = neighborNode.chargerId;
+            // Check Feature 1: Empty Node
+            if (neighborNode.state == NODE_IDLE)
+            {
+                hasIdleNeighbor = true;
+            }
+            // Check Occupied Nodes
+            else if (neighborNode.state == NODE_OCCUPIED)
+            {
+                int neighborPileId = neighborNode.chargerId;
+
+                // Check Feature 2: Same Pile Neighbor
+                if (neighborPileId == occupiedPileId)
+                {
+                    hasSamePileNeighbor = true;
+                }
+                // Check Feature 3: Other Pile with Significant Deficit
+                else if (neighborPileId >= 1 && neighborPileId <= m_piles.size())
+                {
+                    ChargingPile &nPool = m_piles[neighborPileId - 1];
+                    deficit = nPool.requiredNodes - nPool.allocatedNodes.size();
+
+                    if (deficit >= MIN_DEFICIT_NODES)
+                    {
+                        hasSignificantDeficit = true;
+                        priority = m_piles[neighborPileId - 1].priority;
+                    }
+                }
+            }
+        }
+
+        // 3. Verify all conditions are met
+        if (hasSamePileNeighbor && hasIdleNeighbor && hasSignificantDeficit)
+        {
+            // Select the best candidate pile (Highest Deficit, then Highest Priority)
+            CandidateNodes.append({nodeId, occupiedPileId, deficit, priority});
+        }
+    }
+    if (!CandidateNodes.isEmpty())
+    {
+        // Select the best candidate pile (Highest Deficit, then Highest Priority)
+        CandidateNode &bestCandidate = *std::min_element(CandidateNodes.begin(), CandidateNodes.end(), [](const CandidateNode &a, const CandidateNode &b)
+                                                         { return a.deficit > b.deficit || (a.deficit == b.deficit && a.priority > b.priority); });
+
+        if (bestCandidate.id >= 1 && bestCandidate.id <= m_piles.size())
+        {
+            bool res = allocateNodes_auto(bestCandidate.pileId, m_config.unitPower);
+            if (res)
+            {
+                qInfo() << "动态调优结果:充电桩" << bestCandidate.pileId << "转移节点" << bestCandidate.id << "保持桩功率正常";
+                releaseNodeFromPile(bestCandidate.id, bestCandidate.pileId);
+                return true;
+            }
+        }
+    }
+}
+bool SimpleTopology::preemptor(int pileId, int quota)
 {
 
     if (pileId < 1 || pileId > m_piles.size())
@@ -308,10 +484,10 @@ bool SimpleTopology::preemptor(int pileId, int requiredPower)
 
     pile.state = PILE_CHARGING;
 
-    qDebug() << "充电桩" << pileId << "请求功率:" << requiredPower << "kW";
+    qInfo() << "充电桩" << pileId << "请求功率模块:" << quota << "个";
 
-    // 计算需要多少个节点
-    int quota = (pile.allocatedPower + requiredPower + 39) / 40 - pile.allocatedNodes.size(); // 功率需额增量,向上取整，每个节点40kW
+    quota = quota - pile.allocatedNodes.size();
+    quota = qMax(quota, 0);
     // 遍历当前桩充电桩已分配的节点,尝试从这些节点的邻居节点中寻找分值最高的可抢占节点进行分配
     QVector<int> nodeScores;
     nodeScores.resize(m_nodes.size());
@@ -333,24 +509,7 @@ bool SimpleTopology::preemptor(int pileId, int requiredPower)
                 int neighbors_pileId = m_nodes[neighborId - 1].chargerId;
                 ChargingPile &neighbors_pile = m_piles[neighbors_pileId - 1];
                 // 获取邻居节点的得分
-                int score = 0;
-                // pile的优先级是否大于邻居节点的优先级,并且邻居节点不属于充电桩的已分配节点
-                if (pile.priority > neighbors_pile.priority && !pile.allocatedNodes.contains(neighborId))
-                {
-                    // 并且这个邻居节点不是所属pile的连接基节点
-                    if (neighborId != neighbors_pile.connectedNode)
-                    {
-                        score = 100000;
-                    }
-                }
-                if (score == 100000)
-                {
-                    // 邻居节点与所属充电桩直连基节点的跳数
-                    int hops = get_hops_occupied(neighbors_pile.connectedNode, neighborId, neighbors_pileId);
-                    score += hops * 1000;
-                    score += neighbors_pile.priority * 100;
-                    score += neighbors_pile.allocatedNodes.size() * 1;
-                }
+                int score = makesScores(SENARIO_PREEMPT, pileId, neighbors_pileId, nodeId, neighborId);
                 if (nodeScores[neighborId - 1] == -1)
                 {
                     nodeScores[neighborId - 1] = score;
@@ -359,11 +518,13 @@ bool SimpleTopology::preemptor(int pileId, int requiredPower)
         }
         // 找到得分最高的节点并返回节点序号
         // 打印nodeScores得分
-        qDebug() << "nodeScores:";
+        qInfo() << "nodeScores:";
+        QString logStr;
         for (int i = 0; i < nodeScores.size(); ++i)
         {
-            qDebug() << "N" << i + 1 << ":" << nodeScores[i];
+            logStr.append(QString("N%1:%2 ").arg(i + 1).arg(nodeScores[i]));
         }
+        qInfo() << "nodeScores:" << logStr;
 
         int bestNode = 0;
         int bestScore = -1;
@@ -375,13 +536,13 @@ bool SimpleTopology::preemptor(int pileId, int requiredPower)
                 bestScore = nodeScores[i];
             }
         }
-        qDebug() << "bestNode:" << bestNode << "bestScore:" << bestScore << "\n";
+        qInfo() << "bestNode:" << bestNode << "bestScore:" << bestScore << "\n";
         if (bestNode == 0)
         {
             qWarning() << "没有可抢占的节点";
             return false;
         }
-        if (bestScore < 100000)
+        if (bestScore < (WEIGHT_8 * 1 + WEIGHT_7 * 1)) // 如果最高分都小于抢占分值,则不进行抢占)
         {
             qWarning() << "没有合格分数的节点可以抢占";
             return false;
@@ -407,17 +568,18 @@ bool SimpleTopology::requestPower(int pileId, int requiredPower)
         return false;
     }
 
-    if (requiredPower < 0 || requiredPower > m_nodes.size() * 40)
+    if (requiredPower < 0 || requiredPower > m_nodes.size() * m_config.unitPower)
     {
         qWarning() << "无效的功率请求:" << requiredPower;
         return false;
     }
-    int pretive_require = requiredPower;
+
     // 如果充电桩没有占用过节点,则首先申请充电桩自带的电气连接节点,
     // 如果这个电气连接节点已经被其他桩占有,则尝试让其他充电桩推掉这个节点
     ChargingPile &pile = m_piles[pileId - 1];
     PowerNode &node = m_nodes[pile.connectedNode - 1];
-
+    int quota = (pile.requiredPower + requiredPower) / m_config.unitPower;
+    quota += (pile.requiredPower + requiredPower) % m_config.unitPower ? 1 : 0;
     if (pile.state == PILE_IDLE && node.state == NODE_OCCUPIED)
     {
         bool res = releaseNodes_manu(pile.connectedNode);
@@ -425,14 +587,15 @@ bool SimpleTopology::requestPower(int pileId, int requiredPower)
         {
             allocateNodeToPile(pile.connectedNode, pileId);
             pile.state = PILE_CHARGING;
-            requiredPower -= 40;
-            requiredPower = qMax(requiredPower, 0);
+            quota -= 1;
         }
     }
 
-    bool res = allocateNodes_auto(pileId, requiredPower);
-    pile.requiredPower += pretive_require;
-    pile.requiredPower = qMin(pile.requiredPower, m_nodes.size() * 40);
+    bool res = allocateNodes_auto(pileId, quota);
+
+    pile.requiredPower += requiredPower;
+    pile.requiredPower = qMin(pile.requiredPower, m_nodes.size() * m_config.unitPower);
+    pile.requiredNodes = (pile.requiredPower + m_config.unitPower - 1) / m_config.unitPower; // 向上取整计算需要的节点数
     if (res)
     {
         return true;
@@ -440,7 +603,7 @@ bool SimpleTopology::requestPower(int pileId, int requiredPower)
     else
     {
         // 节点分配不成功,尝试抢占/分享机制
-        return preemptor(pileId, requiredPower);
+        return preemptor(pileId, quota);
     }
 
     return false;
@@ -457,7 +620,6 @@ void SimpleTopology::releasePower(int pileId, int powerToRelease)
     if (occupiedNodesNum == 0)
     {
         m_piles[pileId - 1].state = PILE_IDLE;
-        m_piles[pileId - 1].allocatedPower = 0;
         m_piles[pileId - 1].requiredPower = 0;
         qWarning() << "充电桩" << pileId << "没有节点占用";
         return;
@@ -472,10 +634,14 @@ void SimpleTopology::releasePower(int pileId, int powerToRelease)
         pile.state = PILE_IDLE;
     }
 
-    qDebug() << "充电桩" << pileId << "释放功率:" << powerToRelease << "kW";
-    int quota = (pile.requiredPower + 39) / 40;
-    quota = pile.allocatedNodes.size() - quota; // 计算需要释放多少个节点
+    qInfo() << "充电桩" << pileId << "释放功率:" << QString::asprintf("%.1f", powerToRelease / 10.0) << "kW";
+    int quota = (pile.requiredPower + m_config.unitPower - 1) / m_config.unitPower;
+    quota = occupiedNodesNum - quota; // 计算需要释放多少个节点
     quota = qMax(quota, 0);
+    if (quota <= 0)
+    {
+        return;
+    }
     // 查找最近的可用节点
     QVector<int> farthestNodes;
     findAvailableNodes(pileId, pile.connectedNode, quota, farthestNodes, FARTHEST);
@@ -490,7 +656,34 @@ void SimpleTopology::releasePower(int pileId, int powerToRelease)
     {
         releaseNodeFromPile(nodeId, pileId);
     }
-    maneuver_ReleasedNodes(pileId, farthestNodes);
+    // bool res = true;
+    // int cnt = 0;
+    // while (res && cnt < m_config.pileCount) // 添加循环次数限制，避免无限循环
+    //{
+    //   res = maneuver_ReleasedNodes(pileId, farthestNodes);
+    //  if (!res)
+    //  {
+    //     qWarning() << "没有可优化节点移动";
+    //      break;
+    // }
+    // cnt++;
+    // }
+    // 找到所有空节点
+    QVector<int> idleNodes;
+    idleNodes.clear();
+    for (int i = 0; i < m_nodes.size(); ++i)
+    {
+        if (m_nodes[i].state == NODE_IDLE)
+        {
+            idleNodes.append(i + 1);
+        }
+    }
+    if (idleNodes.size() <= 0)
+    {
+        qWarning() << "没有空闲节点";
+        return;
+    }
+    inheritor(pileId, idleNodes);
 
     emit topologyChanged();
 }
@@ -518,12 +711,11 @@ void SimpleTopology::allocateNodeToPile(int nodeId, int pileId)
     node.state = NODE_OCCUPIED;
     node.chargerId = pileId;
     pile.allocatedNodes.insert(nodeId);
-    pile.allocatedPower += node.availablePower;
 
     // 更新接触器状态
     updateContactorStates(pileId, 0);
 
-    qDebug() << "分配节点" << nodeId << "给充电桩" << pileId;
+    qInfo() << "分配节点" << nodeId << "给充电桩" << pileId;
 
     emit topologyChanged();
 }
@@ -551,11 +743,10 @@ void SimpleTopology::releaseNodeFromPile(int nodeId, int pileId)
     node.state = NODE_IDLE;
     node.chargerId = -1;
     pile.allocatedNodes.remove(nodeId);
-    pile.allocatedPower -= node.availablePower;
-    pile.allocatedPower = qMax(0, pile.allocatedPower);
+    pile.requiredNodes = (pile.requiredPower + m_config.unitPower - 1) / m_config.unitPower;
+
     if (pile.allocatedNodes.size() == 0)
     {
-        pile.allocatedPower = 0;
         pile.requiredPower = 0;
         pile.state = PILE_IDLE;
     }
@@ -563,7 +754,7 @@ void SimpleTopology::releaseNodeFromPile(int nodeId, int pileId)
     // 更新接触器状态
     updateContactorStates(pileId, nodeId);
 
-    qDebug() << "从充电桩" << pileId << "释放节点" << nodeId;
+    qInfo() << "从充电桩" << pileId << "释放节点" << nodeId;
 
     emit topologyChanged();
 }
@@ -635,6 +826,7 @@ void SimpleTopology::updateContactorStates(int pileId, int nodeId)
             m_contactors[m_nodes.size() + oppositeNode - 1].isClosed = true;
         }
     }
+    qInfo() << "更新接触器状态";
 }
 
 // 添加辅助方法检查两个节点是否在连通子图中相连
@@ -750,7 +942,7 @@ void SimpleTopology::setPilePriority(int pileId, int priority)
     }
 
     m_piles[pileId - 1].priority = priority;
-    qDebug() << "充电桩" << pileId << "优先级设置为:" << priority;
+    // qInfo() << "充电桩" << pileId << "优先级设置为:" << priority;
 
     emit topologyChanged();
 }
@@ -826,7 +1018,6 @@ bool SimpleTopology::loadState(const QJsonObject &state)
     {
         pile.state = PILE_IDLE;
         pile.requiredPower = 0;
-        pile.allocatedPower = 0;
         pile.allocatedNodes.clear();
     }
     // 清空全局 locked 数组（如果使用了外部C函数，这里也需要重置，但本类内部状态已清空）
@@ -866,7 +1057,7 @@ bool SimpleTopology::loadState(const QJsonObject &state)
                 node.state = NODE_OCCUPIED;
                 node.chargerId = pile.id;
                 pile.allocatedNodes.insert(nodeId);
-                pile.allocatedPower += node.availablePower;
+
                 // 同步外部 locked 数组（如果使用了 set_locked）
                 // extern void set_locked(int pileid, int nodeid);
                 // set_locked(pile.id, nodeId);

@@ -19,7 +19,7 @@
      <widget class="QGraphicsView" name="graphicsView">
       <property name="sizePolicy">
        <sizepolicy hsizetype="Expanding" vsizetype="Expanding">
-        <horstretch>7</horstretch>
+        <horstretch>0</horstretch>
         <verstretch>0</verstretch>
        </sizepolicy>
       </property>
@@ -79,6 +79,36 @@
           </property>
           <property name="value">
            <number>8</number>
+          </property>
+         </widget>
+        </item>
+        <item>
+         <widget class="QLabel" name="label_unitPower">
+          <property name="text">
+           <string>单机功率:</string>
+          </property>
+         </widget>
+        </item>
+        <item>
+        
+         <widget class="QDoubleSpinBox" name="unitPowerSpinBox">
+          <property name="suffix">
+           <string> kW</string>
+          </property>
+          <property name="decimals">
+           <number>1</number>  <!-- 保留1位小数 -->
+          </property>
+          <property name="minimum">
+           <double>10.000000000000000</double>
+          </property>
+          <property name="maximum">
+           <double>80.000000000000000</double>
+          </property>
+          <property name="singleStep">
+           <double>0.500000000000000</double> <!-- 步长设为 0.5 -->
+          </property>
+          <property name="value">
+           <double>40.000000000000000</double>
           </property>
          </widget>
         </item>
@@ -223,30 +253,30 @@
        </widget>
       </item>
       <item>
- <widget class="QLabel" name="label_10">
-  <property name="text">
-   <string>工况保存/加载</string>
-  </property>
- </widget>
-</item>
-<item>
- <layout class="QHBoxLayout" name="horizontalLayout_6">
-  <item>
-   <widget class="QPushButton" name="saveStateButton">
-    <property name="text">
-     <string>保存工况</string>
-    </property>
-   </widget>
-  </item>
-  <item>
-   <widget class="QPushButton" name="loadStateButton">
-    <property name="text">
-     <string>加载工况</string>
-    </property>
-   </widget>
-  </item>
- </layout>
-</item>
+       <widget class="QLabel" name="label_10">
+        <property name="text">
+         <string>工况保存/加载</string>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <layout class="QHBoxLayout" name="horizontalLayout_6">
+        <item>
+         <widget class="QPushButton" name="saveStateButton">
+          <property name="text">
+           <string>保存工况</string>
+          </property>
+         </widget>
+        </item>
+        <item>
+         <widget class="QPushButton" name="loadStateButton">
+          <property name="text">
+           <string>加载工况</string>
+          </property>
+         </widget>
+        </item>
+       </layout>
+      </item>
      </layout>
     </item>
    </layout>

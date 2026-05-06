@@ -1,4 +1,4 @@
-QT += core gui widgets
+QT += core gui widgets network
 
 greaterThan(QT_MAJOR_VERSION, 4): QT += widgets
 
@@ -93,11 +93,13 @@ SOURCES += \
     directedgraph.cpp \
     main.cpp \
     mainwindow.cpp \
-    powertopology.cpp
+    powertopology.cpp \
+    telnetconsole.cpp
 
 HEADERS += \
     mainwindow.h \
-    powertopology.h
+    powertopology.h \
+    telnetconsole.h
 
 FORMS += \
     mainwindow.ui

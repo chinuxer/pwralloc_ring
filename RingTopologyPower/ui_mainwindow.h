@@ -39,6 +39,8 @@ public:
     QHBoxLayout *horizontalLayout_nodePile;
     QLabel *label_3;
     QSpinBox *pileCountSpinBox;
+    QLabel *label_unitPower;
+    QDoubleSpinBox *unitPowerSpinBox;
     QPushButton *applyConfigButton;
     QLabel *label_4;
     QComboBox *pileComboBox;
@@ -92,7 +94,7 @@ public:
         nodeCountSpinBox->setObjectName(QString::fromUtf8("nodeCountSpinBox"));
         nodeCountSpinBox->setMinimum(6);
         nodeCountSpinBox->setMaximum(36);
-        nodeCountSpinBox->setValue(18);
+        nodeCountSpinBox->setValue(20);
         horizontalLayout_nodePile->addWidget(nodeCountSpinBox);
         label_3 = new QLabel(centralwidget);
         label_3->setObjectName(QString::fromUtf8("label_3"));
@@ -102,10 +104,22 @@ public:
         pileCountSpinBox = new QSpinBox(centralwidget);
         pileCountSpinBox->setObjectName(QString::fromUtf8("pileCountSpinBox"));
         pileCountSpinBox->setMinimum(1);
-        pileCountSpinBox->setMaximum(12);
-        pileCountSpinBox->setValue(9);
-
+        pileCountSpinBox->setMaximum(18);
+        pileCountSpinBox->setValue(10);
         horizontalLayout_nodePile->addWidget(pileCountSpinBox);
+
+        label_unitPower = new QLabel(centralwidget);
+        label_unitPower->setObjectName(QString::fromUtf8("label_unitPower"));
+        horizontalLayout_nodePile->addWidget(label_unitPower);
+
+        unitPowerSpinBox = new QDoubleSpinBox(centralwidget);
+        unitPowerSpinBox->setObjectName(QString::fromUtf8("unitPowerSpinBox"));
+        unitPowerSpinBox->setDecimals(1);
+        unitPowerSpinBox->setMinimum(1.0);
+        unitPowerSpinBox->setMaximum(80.0);
+        unitPowerSpinBox->setValue(40.0);
+        unitPowerSpinBox->setSingleStep(0.5);
+        horizontalLayout_nodePile->addWidget(unitPowerSpinBox);
 
         verticalLayout->addLayout(horizontalLayout_nodePile);
 
@@ -258,6 +272,9 @@ public:
         label_8->setText(QApplication::translate("MainWindow", "\346\223\215\344\275\234\346\227\245\345\277\227", nullptr));
         saveStateButton->setText(QApplication::translate("MainWindow", "保存工况", nullptr));
         loadStateButton->setText(QApplication::translate("MainWindow", "加载工况", nullptr));
+        label_unitPower->setText(QApplication::translate("MainWindow", "单机功率:", nullptr));
+        unitPowerSpinBox->setSuffix(QApplication::translate("MainWindow", " kW", nullptr));
+
     } // retranslateUi
 };
 

@@ -23,6 +23,14 @@ enum PileState
     PILE_CHARGING
 };
 
+enum Senario
+{
+    SENARIO_PREEMPT = 0,
+    SENARIO_SHARING,
+    SENARIO_INHERIT,
+    SENARIO_RELIEVE
+};
+
 // 功率节点
 struct PowerNode
 {
@@ -50,7 +58,7 @@ struct ChargingPile
     PileState state;          // 充电桩状态
     int connectedNode;        // 连接的节点ID
     int requiredPower;        // 需求功率 (kW)
-    int allocatedPower;       // 已分配功率 (kW)
+    int requiredNodes;        // 需求节点数
     QSet<int> allocatedNodes; // 已分配的节点
     QColor color;             // 显示颜色
 };
@@ -60,6 +68,7 @@ struct TopologyConfig
 {
     int nodeCount;          // 节点数量
     int pileCount;          // 充电桩数量
+    int unitPower;          // 单模块节点功率
     QVector<int> pileNodes; // 每个充电桩连接的节点
     double circleRadius;    // 环形半径
     QPointF center;         // 圆心位置
@@ -113,7 +122,8 @@ public:
     void releasePower(int pileId, int powerToRelease) override;
     void allocateNodeToPile(int nodeId, int pileId) override;
     void releaseNodeFromPile(int nodeId, int pileId) override;
-    void maneuver_ReleasedNodes(int pileId, const QVector<int> &nodeIds_to_release);
+    bool maneuver_ReleasedNodes(int pileId, const QVector<int> &nodeIds_to_release);
+    void inheritor(int pileId, const QVector<int> &nodeIds_to_release);
     QVector<int> getNodePriority(int pileId) override;
     void getNeighbors(int nodeId, QVector<int> &result);
     QJsonObject saveState() const;
@@ -121,6 +131,8 @@ public:
     // 手动操作接口（用于测试）
     void allocateNodes_manu(int nodeId, int pileId);
     bool releaseNodes_manu(int nodeId);
+
+    int makesScores(Senario scenario, int pileId, int neighborPileId, int nodeId, int neighborNodeId);
 public slots:
     // 设置充电桩优先级
     void setPilePriority(int pileId, int priority);

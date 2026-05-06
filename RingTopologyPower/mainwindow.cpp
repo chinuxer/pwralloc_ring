@@ -14,14 +14,16 @@ MainWindow::MainWindow(QWidget *parent)
     : QMainWindow(parent), ui(new Ui::MainWindow), m_topology(new SimpleTopology(this)), m_scene(new QGraphicsScene(this)), m_selectedNode(-1), m_selectedPile(-1)
 {
     ui->setupUi(this);
-
+    ui->horizontalLayout->setStretch(0, 7);
+    ui->horizontalLayout->setStretch(1, 3);
     // 初始化UI
     ui->graphicsView->setScene(m_scene);
     ui->graphicsView->setRenderHint(QPainter::Antialiasing);
 
     // 默认配置
-    ui->nodeCountSpinBox->setValue(18);
-    ui->pileCountSpinBox->setValue(9);
+    ui->nodeCountSpinBox->setValue(20);
+    ui->pileCountSpinBox->setValue(10);
+    ui->unitPowerSpinBox->setValue(40);
 
     // 设置节点列表
     ui->nodeListWidget->clear();
@@ -97,7 +99,7 @@ MainWindow::MainWindow(QWidget *parent)
     }
 
     /* 旋钮/微调框 */
-    QSpinBox, QComboBox {
+    QSpinBox, QDoubleSpinBox,QComboBox {
         background-color: #1a1a2e;
         border: 1px solid #2a82da;
         border-radius: 4px;
@@ -139,7 +141,7 @@ MainWindow::MainWindow(QWidget *parent)
         border-bottom: 2px solid #2a82da;
         margin-top: 10px;
     }
-    QLabel[label_2], QLabel[label_3] {
+    QLabel[label_2], QLabel[label_3],QLabel[label_unitPower] {
     color: #657eee;  
     font-size: 12pt;  
     font-weight: bold;
@@ -176,7 +178,7 @@ void MainWindow::onApplyConfigClicked()
 {
     int nodeCount = ui->nodeCountSpinBox->value();
     int pileCount = ui->pileCountSpinBox->value();
-
+    int unitPower = ui->unitPowerSpinBox->value() * 10;
     // 验证配置
     if (nodeCount % 2 != 0)
     {
@@ -188,6 +190,11 @@ void MainWindow::onApplyConfigClicked()
     if (pileCount <= 0)
     {
         QMessageBox::warning(this, "配置错误", "充电桩数量必须大于0");
+        return;
+    }
+    if (unitPower <= 0 || unitPower > 800)
+    {
+        QMessageBox::warning(this, "配置错误", "单桩功率必须大于0");
         return;
     }
     ui->nodeListWidget->clear();
@@ -226,6 +233,7 @@ void MainWindow::onApplyConfigClicked()
     config.nodeCount = nodeCount;
     config.pileCount = pileCount;
     config.pileNodes = pileNodes;
+    config.unitPower = unitPower;
     config.circleRadius = 200.0;
     config.center = QPointF(300, 300);
 
@@ -243,7 +251,7 @@ void MainWindow::onApplyConfigClicked()
 void MainWindow::onRequestPowerClicked()
 {
     int pileId = ui->pileComboBox->currentIndex() + 1;
-    int power = ui->powerSpinBox->value();
+    int power = ui->powerSpinBox->value() * 10;
     int priority = ui->prioritySpinBox->value();
 
     if (pileId < 1 || pileId > m_topology->getChargingPiles().size())
@@ -274,7 +282,7 @@ void MainWindow::onRequestPowerClicked()
 void MainWindow::onReleasePowerClicked()
 {
     int pileId = ui->pileComboBox->currentIndex() + 1;
-    int power = ui->powerSpinBox->value();
+    int power = ui->powerSpinBox->value() * 10;
 
     if (pileId < 1 || pileId > m_topology->getChargingPiles().size())
     {
@@ -305,15 +313,14 @@ void MainWindow::onPileSelectionChanged(int index)
                     "状态: %2\n"
                     "连接节点: %3\n"
                     "需求功率: %4kW\n"
-                    "已分配功率: %5kW\n"
+                    "需求节点数: %5\n"
                     "占用节点数: %6\n"
                     "优先级: %7") // 添加优先级显示
                 .arg(pile.id)
                 .arg(pile.state == PILE_CHARGING ? "充电中" : "空闲")
                 .arg(pile.connectedNode)
                 .arg(pile.requiredPower)
-                .arg(pile.allocatedPower)
-                .arg(pile.allocatedNodes.size())
+                .arg(pile.requiredNodes)
                 .arg(pile.priority));
 
         // 同步优先级选择框的值
@@ -526,7 +533,7 @@ void MainWindow::setupGraphicsScene()
 
         // 充电桩标签（显示功率）
         QGraphicsTextItem *label = new QGraphicsTextItem(
-            QString("P%1").arg(pile.id).arg(pile.requiredPower));
+            QString("P%1").arg(pile.id));
         label->setPos(pilePos.x() - 12, pilePos.y() - 12);
         label->setDefaultTextColor(Qt::black);
         label->setFont(QFont("Arial", 10, QFont::Bold));
@@ -565,7 +572,7 @@ void MainWindow::setupGraphicsScene()
 
     // 标题
     QGraphicsTextItem *title = new QGraphicsTextItem(
-        QString("%1kW环形拓扑功率分配演示系统  %2节点 %3充电桩").arg(config.nodeCount * 40).arg(config.nodeCount).arg(config.pileCount));
+        QString("%1kW环形拓扑功率分配演示系统  %2节点 %3充电桩").arg(config.nodeCount * config.unitPower / 10).arg(config.nodeCount).arg(config.pileCount));
     title->setPos(140, 700);
     title->setDefaultTextColor(Qt::lightGray);
     title->setFont(QFont("Arial", 11, QFont::Bold));
@@ -579,6 +586,7 @@ void MainWindow::updateGraphics()
     const auto &config = m_topology->getConfig();
 
     // 更新节点颜色
+
     for (int i = 0; i < nodes.size() && i < m_nodeItems.size(); i++)
     {
         const auto &node = nodes[i];
@@ -605,6 +613,7 @@ void MainWindow::updateGraphics()
     }
 
     // 更新接触器 - 根据连接的充电桩着色
+
     for (int i = 0; i < contactors.size() && i < m_contactorItems.size(); i++)
     {
         if (m_contactorItems[i])
@@ -670,6 +679,7 @@ void MainWindow::updateGraphics()
     }
 
     // 更新充电桩连接线 - 根据充电桩状态着色
+
     for (int i = 0; i < piles.size() && i < m_pileConnections.size(); i++)
     {
         if (m_pileConnections[i])
@@ -690,6 +700,7 @@ void MainWindow::updateGraphics()
     }
 
     // 更新充电桩标签 - 添加优先级显示
+
     for (int i = 0; i < piles.size() && i < m_pileItems.size(); i++)
     {
         m_pileItems[i]->setBrush(piles[i].color);
@@ -699,8 +710,8 @@ void MainWindow::updateGraphics()
         {
             // 使用 setPlainText() 或 setHtml() 来更新文本
             QString labelText = QString("%1:%2\n%3级")
-                                    .arg(piles[i].allocatedPower)
-                                    .arg(piles[i].requiredPower)
+                                    .arg(piles[i].allocatedNodes.size())
+                                    .arg(piles[i].requiredNodes)
                                     .arg(piles[i].priority);
             m_pileLabelItems[i]->setPlainText(labelText);
         }
@@ -731,10 +742,10 @@ void MainWindow::updateStatusDisplay()
             nodeList += QString::number(nodeId) + " ";
         }
 
-        statusText += QString("桩%1: %2kW/%3kW [%4]\n")
+        statusText += QString("桩%1: %2/%3 [%4]\n")
                           .arg(pile.id)
-                          .arg(pile.allocatedPower)
-                          .arg(pile.requiredPower)
+                          .arg(pile.allocatedNodes.size())
+                          .arg(pile.requiredNodes)
                           .arg(nodeList.isEmpty() ? "无节点" : nodeList);
     }
 
