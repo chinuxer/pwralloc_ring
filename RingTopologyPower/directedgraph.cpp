@@ -103,6 +103,10 @@ void set_locked(int pileid, int nodeid)
 {
     config.locked[nodeid] = pileid; // 标记为已分配（锁定）
 }
+int get_locked(int nodeid)
+{
+    return config.locked[nodeid];
+}
 static int find_min_dist_index(int pileid, int startid)
 {
     int min_index = -1;
@@ -222,9 +226,9 @@ void pau_init(int nodes, int piles)
         printf("节点数量必须为偶数\n");
         return;
     }
-    if (piles > nodes / 2)
+    if (piles > nodes)
     {
-        printf("充电桩数量不能超过节点半数\n");
+        printf("充电桩数量不能超过节点数量\n");
         return;
     }
     config.nodeCount = nodes;

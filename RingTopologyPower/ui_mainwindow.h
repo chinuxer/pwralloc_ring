@@ -116,7 +116,7 @@ public:
         unitPowerSpinBox->setObjectName(QString::fromUtf8("unitPowerSpinBox"));
         unitPowerSpinBox->setDecimals(1);
         unitPowerSpinBox->setMinimum(1.0);
-        unitPowerSpinBox->setMaximum(80.0);
+        unitPowerSpinBox->setMaximum(200.0);
         unitPowerSpinBox->setValue(40.0);
         unitPowerSpinBox->setSingleStep(0.5);
         horizontalLayout_nodePile->addWidget(unitPowerSpinBox);
@@ -140,7 +140,9 @@ public:
 
         powerSpinBox = new QSpinBox(centralwidget);
         powerSpinBox->setObjectName(QString::fromUtf8("powerSpinBox"));
-        powerSpinBox->setMaximum(1000);
+
+        powerSpinBox->setMinimum(1);
+        powerSpinBox->setMaximum(2000);
         powerSpinBox->setValue(40);
 
         verticalLayout->addWidget(powerSpinBox);

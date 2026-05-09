@@ -59,7 +59,9 @@ private:
     QVector<QGraphicsLineItem *> m_contactorItems;
     QVector<QGraphicsEllipseItem *> m_pileItems;
     QVector<QGraphicsLineItem *> m_pileConnections;
-    QVector<QGraphicsTextItem *> m_pileLabelItems;
+    QVector<QGraphicsTextItem *> m_pileLabelItems;   // 充电桩状态标签（显示节点数/优先级）
+    QVector<QGraphicsTextItem *> m_nodeLabelItems;   // 节点编号标签
+    QVector<QGraphicsTextItem *> m_pileIdLabelItems; // 充电桩ID标签（如"P1"）
 
     // 当前选中的节点和充电桩
     int m_selectedNode;

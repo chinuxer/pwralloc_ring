@@ -106,7 +106,7 @@ QVector<QColor> SimpleTopology::generateColors(int count)
         QColor(100, 255, 100), // 绿色
         QColor(100, 255, 255), // 青色
         QColor(100, 125, 255), // 蓝色
-        QColor(50, 25, 120),   // 紫色
+        QColor(50, 30, 110),   // 紫色
         QColor(255, 50, 225),  // 洋红色
         QColor(65, 160, 140),  // 海蓝
         QColor(130, 130, 100), // 松青
@@ -180,7 +180,7 @@ bool SimpleTopology::allocateNodes_auto(int pileId, int quota)
 
     pile.state = PILE_CHARGING;
 
-    qInfo() << "充电桩" << pileId << "请求功率节点:" << quota;
+    qInfo() << "充电桩" << pileId << "请求功率节点:" << quota << "个";
 
     if (quota == 0)
     {
@@ -636,10 +636,12 @@ void SimpleTopology::releasePower(int pileId, int powerToRelease)
 
     qInfo() << "充电桩" << pileId << "释放功率:" << QString::asprintf("%.1f", powerToRelease / 10.0) << "kW";
     int quota = (pile.requiredPower + m_config.unitPower - 1) / m_config.unitPower;
+    pile.requiredNodes = quota;
     quota = occupiedNodesNum - quota; // 计算需要释放多少个节点
     quota = qMax(quota, 0);
     if (quota <= 0)
     {
+        emit topologyChanged();
         return;
     }
     // 查找最近的可用节点
@@ -763,70 +765,109 @@ void SimpleTopology::releaseNodeFromPile(int nodeId, int pileId)
 void SimpleTopology::updateContactorStates(int pileId, int nodeId)
 {
     if (pileId < 1 || pileId > m_piles.size())
-    {
         return;
-    }
-    if (nodeId < 0 || nodeId > m_nodes.size())
-    {
+    if (m_piles[pileId - 1].state != PILE_CHARGING)
         return;
-    }
+
+    // 处理单节点释放：仅断开与该节点相关的接触器
     if (nodeId > 0)
     {
-        for (Contactor &contactor : m_contactors)
-        {
-            if (contactor.node1 == nodeId || contactor.node2 == nodeId)
-            {
-                contactor.isClosed = false;
-            }
-        }
-        return;
+        for (Contactor &c : m_contactors)
+            if (c.node1 == nodeId || c.node2 == nodeId)
+                c.isClosed = false;
+        // return;
     }
+
+    // 整体更新：基于并查集构建无环生成树
     const ChargingPile &pile = m_piles[pileId - 1];
-    const QSet<int> &allocatedNodes = pile.allocatedNodes;
-
-    // 收集所有相关节点（充电桩连接节点 + 已分配节点）
-    QSet<int> relevantNodes = allocatedNodes;
-
-    if (allocatedNodes.isEmpty())
-    {
+    QSet<int> allocated = pile.allocatedNodes;
+    if (allocated.isEmpty())
         return;
+
+    // 充电桩连接节点必须视为已占有（即使它可能未被显式分配）
+    allocated.insert(pile.connectedNode);
+
+    // ---- 1. 收集所有可能的边（环形边 + 对角线边） ----
+    struct Edge
+    {
+        int u, v;
+        bool diagonal; // false:环形边, true:对角线边
+    };
+    QVector<Edge> candidates;
+    int half = m_config.nodeCount / 2;
+
+    for (int u : allocated)
+    {
+        // 左邻 (环形)
+        int left = (u == 1) ? m_config.nodeCount : u - 1;
+        if (allocated.contains(left) && left < u) // 去重：仅当 left < u 时加入
+            candidates.push_back({left, u, false});
+        // 右邻 (环形)
+        int right = (u == m_config.nodeCount) ? 1 : u + 1;
+        if (allocated.contains(right) && right < u)
+            candidates.push_back({right, u, false});
+        // 对径点
+        int opp = u + half;
+        if (opp > m_config.nodeCount)
+            opp -= m_config.nodeCount;
+        if (allocated.contains(opp) && opp < u)
+            candidates.push_back({opp, u, true});
     }
 
-    // 遍历所有接触器，检查是否连接相关节点
-    for (Contactor &contactor : m_contactors)
+    // ---- 2. 并查集准备 ----
+    QMap<int, int> parent;
+    std::function<int(int)> find = [&](int x) -> int
     {
-        // 如果接触器连接的两个节点都在相关节点集合中，则闭合
-        if (relevantNodes.contains(contactor.node1) && relevantNodes.contains(contactor.node2))
+        if (parent[x] != x)
+            parent[x] = find(parent[x]);
+        return parent[x];
+    };
+    auto unite = [&](int x, int y)
+    { parent[find(x)] = find(y); };
+
+    for (int v : allocated)
+        parent[v] = v;
+
+    // ---- 3. 临时关闭所有与该充电桩相关的接触器 ----
+    for (Contactor &c : m_contactors)
+        if (allocated.contains(c.node1) && allocated.contains(c.node2))
+            c.isClosed = false;
+
+    // ---- 4. 贪心选择边（优先环形边，后对角线边）构建生成树 ----
+    // 先处理环形边（保证局部连通）
+    for (const Edge &e : candidates)
+    {
+        if (e.diagonal)
+            continue;
+        if (find(e.u) != find(e.v))
         {
-            // 检查这两个节点是否相邻（在已分配节点的连通子图中）
-            if (areNodesNeighbors(contactor.node1, contactor.node2))
-            {
-                contactor.isClosed = true;
-            }
+            unite(e.u, e.v);
+            // 闭合对应的接触器
+            for (Contactor &c : m_contactors)
+                if ((c.node1 == e.u && c.node2 == e.v) || (c.node1 == e.v && c.node2 == e.u))
+                {
+                    c.isClosed = true;
+                    break;
+                }
         }
     }
-    // 遍历所有节点,如果节点左右两侧的接触器是断开的,并且和对径点都被同一个充电桩占有,则闭合对角线接触器
-    for (int allocated : allocatedNodes)
+    // 再处理对角线边，仅用于连接尚未连通的分量
+    for (const Edge &e : candidates)
     {
-        if (allocated < 1 || allocated > m_nodes.size())
-        {
+        if (!e.diagonal)
             continue;
-        }
-        int lastNode = allocated + m_nodes.size() - 1;
-        lastNode = (lastNode - 1) % m_nodes.size() + 1;
-        if (m_contactors[lastNode - 1].isClosed || m_contactors[allocated - 1].isClosed)
+        if (find(e.u) != find(e.v))
         {
-            continue;
-        }
-        int oppositeNode = allocated + m_nodes.size() / 2;
-        oppositeNode = oppositeNode > m_nodes.size() ? oppositeNode - m_nodes.size() : oppositeNode;
-        if (allocatedNodes.contains(oppositeNode))
-        {
-            m_contactors[m_nodes.size() + allocated - 1].isClosed = true;
-            m_contactors[m_nodes.size() + oppositeNode - 1].isClosed = true;
+            unite(e.u, e.v);
+            for (Contactor &c : m_contactors)
+                if ((c.node1 == e.u && c.node2 == e.v) || (c.node1 == e.v && c.node2 == e.u))
+                {
+                    c.isClosed = true;
+                    break;
+                }
         }
     }
-    qInfo() << "更新接触器状态";
+    // 此时所得边集一定无环，且连接了可能的最大分量（若所有节点属于同一分量则全连通）
 }
 
 // 添加辅助方法检查两个节点是否在连通子图中相连
@@ -960,7 +1001,7 @@ int SimpleTopology::getPilePriority(int pileId) const
 QJsonObject SimpleTopology::saveState() const
 {
     QJsonObject state;
-
+    void set_locked(int pileid, int nodeid);
     // 保存基本配置
     state["nodeCount"] = m_config.nodeCount;
     state["pileCount"] = m_config.pileCount;
@@ -993,12 +1034,21 @@ QJsonObject SimpleTopology::saveState() const
         pilesArray.append(pileObj);
     }
     state["piles"] = pilesArray;
-
+    // 保存locked数组状态
+    QJsonArray lockedArray;
+    int get_locked(int nodeid);
+    lockedArray.append(0);
+    for (int i = 1; i <= m_nodes.size(); i++)
+    {
+        lockedArray.append(get_locked(i));
+    }
+    state["locked"] = lockedArray;
     return state;
 }
 
 bool SimpleTopology::loadState(const QJsonObject &state)
 {
+    void set_locked(int pileid, int nodeid);
     // 1. 验证基本配置是否匹配
     int savedNodeCount = state["nodeCount"].toInt();
     int savedPileCount = state["pileCount"].toInt();
@@ -1019,14 +1069,6 @@ bool SimpleTopology::loadState(const QJsonObject &state)
         pile.state = PILE_IDLE;
         pile.requiredPower = 0;
         pile.allocatedNodes.clear();
-    }
-    // 清空全局 locked 数组（如果使用了外部C函数，这里也需要重置，但本类内部状态已清空）
-    // 注意：如果外部有 set_locked 函数，需要相应调用 set_locked(0, nodeId) 清空所有锁
-    for (int i = 1; i <= m_config.nodeCount; ++i)
-    {
-        // 假设 set_locked 定义在别处，我们只需清空内部数组即可
-        // 但为了与外部图算法同步，可调用 extern void set_locked(int pileid, int nodeid);
-        // 这里简单起见，只清内部状态；外部图算法依赖的 locked 数组应由调用方在初始化时维护
     }
 
     // 3. 恢复充电桩优先级、需求功率
@@ -1069,11 +1111,21 @@ bool SimpleTopology::loadState(const QJsonObject &state)
             }
         }
     }
+    // 复制locked状态
+    QJsonArray lockedArray = state["locked"].toArray();
+    set_locked(0, 0);
+    for (int i = 1; i <= lockedArray.size(); i++)
+    {
+        set_locked(lockedArray[i].toInt(), i);
+    }
 
     // 4. 更新接触器状态（根据新的节点分配重新计算）
     for (int pileId = 1; pileId <= m_piles.size(); ++pileId)
     {
-        updateContactorStates(pileId, 0); // 0 表示更新该充电桩的所有接触器
+        if (m_piles[pileId].state == PILE_CHARGING)
+        {
+            updateContactorStates(pileId, 0); // 0 表示更新该充电桩的所有接触器
+        }
     }
 
     emit topologyChanged();

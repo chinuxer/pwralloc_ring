@@ -10,6 +10,13 @@
 #include <QJsonDocument>
 #include <QJsonObject>
 
+// 辅助函数：根据背景颜色自动选择黑色或白色文字
+static QColor getContrastColor(const QColor &bgColor)
+{
+    int brightness = qRound(0.299 * bgColor.red() + 0.587 * bgColor.green() + 0.114 * bgColor.blue());
+    return brightness > 128 ? Qt::black : Qt::white;
+}
+
 MainWindow::MainWindow(QWidget *parent)
     : QMainWindow(parent), ui(new Ui::MainWindow), m_topology(new SimpleTopology(this)), m_scene(new QGraphicsScene(this)), m_selectedNode(-1), m_selectedPile(-1)
 {
@@ -59,7 +66,7 @@ MainWindow::MainWindow(QWidget *parent)
     // 初始配置
     onApplyConfigClicked();
 
-    // 在 MainWindow 构造函数中添加
+    // 样式表与背景（原样保留）
     QPalette palette;
     QLinearGradient gradient(0, 0, 0, 800);
     gradient.setColorAt(0, QColor(10, 10, 20)); // 深蓝黑
@@ -179,6 +186,7 @@ void MainWindow::onApplyConfigClicked()
     int nodeCount = ui->nodeCountSpinBox->value();
     int pileCount = ui->pileCountSpinBox->value();
     int unitPower = ui->unitPowerSpinBox->value() * 10;
+    ui->powerSpinBox->setValue(ui->unitPowerSpinBox->value());
     // 验证配置
     if (nodeCount % 2 != 0)
     {
@@ -192,9 +200,9 @@ void MainWindow::onApplyConfigClicked()
         QMessageBox::warning(this, "配置错误", "充电桩数量必须大于0");
         return;
     }
-    if (unitPower <= 0 || unitPower > 800)
+    if (unitPower <= 0 || unitPower > 2000)
     {
-        QMessageBox::warning(this, "配置错误", "单桩功率必须大于0");
+        QMessageBox::warning(this, "配置错误", "单桩功率必须大于0 小于200");
         return;
     }
     ui->nodeListWidget->clear();
@@ -203,13 +211,13 @@ void MainWindow::onApplyConfigClicked()
     {
         ui->nodeListWidget->addItem(QString("节点 %1").arg(i));
     }
-    // 确保充电桩数量不超过节点数量的一半
-    if (pileCount > nodeCount / 2)
+    // 确保充电桩数量不超过节点数量
+    if (pileCount > nodeCount)
     {
-        pileCount = nodeCount / 2;
+        pileCount = nodeCount;
         ui->pileCountSpinBox->setValue(pileCount);
         QMessageBox::information(this, "配置调整",
-                                 QString("充电桩数量已调整为节点数量的一半: %1").arg(pileCount));
+                                 QString("充电桩数量已调整为节点数量: %1").arg(pileCount));
     }
 
     // 生成充电桩连接节点
@@ -441,7 +449,9 @@ void MainWindow::setupGraphicsScene()
     m_contactorItems.clear();
     m_pileItems.clear();
     m_pileConnections.clear();
-    m_pileLabelItems.clear();
+    m_pileLabelItems.clear();   // 状态标签
+    m_nodeLabelItems.clear();   // 节点编号标签
+    m_pileIdLabelItems.clear(); // 充电桩ID标签
 
     const auto &config = m_topology->getConfig();
     const auto &nodes = m_topology->getNodes();
@@ -450,6 +460,7 @@ void MainWindow::setupGraphicsScene()
 
     // 创建节点图形项
     m_nodeItems.resize(nodes.size());
+    m_nodeLabelItems.resize(nodes.size());
     for (int i = 0; i < nodes.size(); i++)
     {
         const auto &node = nodes[i];
@@ -463,16 +474,17 @@ void MainWindow::setupGraphicsScene()
         m_scene->addItem(item);
         m_nodeItems[i] = item;
 
-        // 节点标签
+        // 节点编号标签
         QGraphicsTextItem *label = new QGraphicsTextItem(QString::number(node.id));
         label->setPos(pos.x() - 12, pos.y() - 12);
-        label->setDefaultTextColor(Qt::black);
-        label->setFont(QFont("Arial", 10));
-        label->setZValue(1); // Bring labels to front
+        label->setDefaultTextColor(Qt::white); // 临时颜色，后续动态调整
+        label->setFont(QFont("Arial", 10, QFont::Bold));
+        label->setZValue(1);
         m_scene->addItem(label);
+        m_nodeLabelItems[i] = label;
     }
 
-    // 创建接触器图形项 - 添加边界检查
+    // 创建接触器图形项
     m_contactorItems.resize(contactors.size());
     for (int i = 0; i < contactors.size(); i++)
     {
@@ -507,7 +519,8 @@ void MainWindow::setupGraphicsScene()
     // 创建充电桩图形项
     m_pileItems.resize(piles.size());
     m_pileConnections.resize(piles.size());
-    m_pileLabelItems.resize(piles.size());
+    m_pileIdLabelItems.resize(piles.size());
+    m_pileLabelItems.resize(piles.size()); // 状态标签
     for (int i = 0; i < piles.size(); i++)
     {
         const auto &pile = piles[i];
@@ -531,15 +544,24 @@ void MainWindow::setupGraphicsScene()
         m_scene->addItem(pileItem);
         m_pileItems[i] = pileItem;
 
-        // 充电桩标签（显示功率）
-        QGraphicsTextItem *label = new QGraphicsTextItem(
-            QString("P%1").arg(pile.id));
-        label->setPos(pilePos.x() - 12, pilePos.y() - 12);
-        label->setDefaultTextColor(Qt::black);
-        label->setFont(QFont("Arial", 10, QFont::Bold));
-        label->setZValue(1); // Bring labels to front
-        m_scene->addItem(label);
-        // 亚克力框
+        // 充电桩ID标签（P1, P2...）
+        QGraphicsTextItem *idLabel = new QGraphicsTextItem(QString("P%1").arg(pile.id));
+        idLabel->setPos(pilePos.x() - 12, pilePos.y() - 12);
+        idLabel->setDefaultTextColor(Qt::white); // 临时颜色，后续动态调整
+        idLabel->setFont(QFont("Arial", 10, QFont::Bold));
+        idLabel->setZValue(1);
+        m_scene->addItem(idLabel);
+        m_pileIdLabelItems[i] = idLabel;
+
+        // 充电桩状态标签（显示节点数/优先级）
+        QGraphicsTextItem *statusLabel = new QGraphicsTextItem();
+        statusLabel->setFont(QFont("Arial", 10, QFont::Bold));
+        statusLabel->setDefaultTextColor(Qt::white); // 临时颜色
+        statusLabel->setZValue(1);
+        m_scene->addItem(statusLabel);
+        m_pileLabelItems[i] = statusLabel;
+
+        // 亚克力框（背景框）
         QGraphicsPathItem *backgroundBox = new QGraphicsPathItem();
         int boxWidth = 60;
         int boxHeight = 40;
@@ -552,14 +574,6 @@ void MainWindow::setupGraphicsScene()
         QPen borderPen(QColor(255, 255, 255, 150), 1);
         backgroundBox->setPen(borderPen);
         m_scene->addItem(backgroundBox);
-        // 文本标签
-        QGraphicsTextItem *textlabel = new QGraphicsTextItem();
-
-        textlabel->setFont(QFont("Arial", 10, QFont::Bold));
-        textlabel->setDefaultTextColor(Qt::white);
-        textlabel->setZValue(1);
-        m_scene->addItem(textlabel);
-        m_pileLabelItems[i] = textlabel;
 
         // 连接线
         QPointF nodePos = calculateNodePosition(pile.connectedNode);
@@ -586,7 +600,6 @@ void MainWindow::updateGraphics()
     const auto &config = m_topology->getConfig();
 
     // 更新节点颜色
-
     for (int i = 0; i < nodes.size() && i < m_nodeItems.size(); i++)
     {
         const auto &node = nodes[i];
@@ -612,8 +625,18 @@ void MainWindow::updateGraphics()
         }
     }
 
-    // 更新接触器 - 根据连接的充电桩着色
+    // 更新节点标签颜色（根据节点圆圈背景色）
+    for (int i = 0; i < nodes.size() && i < m_nodeLabelItems.size(); i++)
+    {
+        if (m_nodeLabelItems[i])
+        {
+            QColor bgColor = m_nodeItems[i]->brush().color();
+            QColor textColor = getContrastColor(bgColor);
+            m_nodeLabelItems[i]->setDefaultTextColor(textColor);
+        }
+    }
 
+    // 更新接触器 - 根据连接的充电桩着色
     for (int i = 0; i < contactors.size() && i < m_contactorItems.size(); i++)
     {
         if (m_contactorItems[i])
@@ -679,7 +702,6 @@ void MainWindow::updateGraphics()
     }
 
     // 更新充电桩连接线 - 根据充电桩状态着色
-
     for (int i = 0; i < piles.size() && i < m_pileConnections.size(); i++)
     {
         if (m_pileConnections[i])
@@ -699,26 +721,39 @@ void MainWindow::updateGraphics()
         }
     }
 
-    // 更新充电桩标签 - 添加优先级显示
-
+    // 更新充电桩状态文本和颜色
     for (int i = 0; i < piles.size() && i < m_pileItems.size(); i++)
     {
-        m_pileItems[i]->setBrush(piles[i].color);
-        QPointF pos = m_pileItems[i]->pos();
-        m_pileLabelItems[i]->setPos(pos.x() - 24, pos.y() + 20);
-        if (m_pileItems[i] && piles[i].state == PILE_CHARGING)
+        const auto &pile = piles[i];
+        QColor pileColor = pile.color;
+        QColor textColor = getContrastColor(pileColor);
+
+        // 更新充电桩图形颜色
+        m_pileItems[i]->setBrush(pileColor);
+
+        // 更新ID标签颜色
+        if (i < m_pileIdLabelItems.size() && m_pileIdLabelItems[i])
+            m_pileIdLabelItems[i]->setDefaultTextColor(textColor);
+
+        // 更新状态标签内容和颜色
+        if (i < m_pileLabelItems.size() && m_pileLabelItems[i])
         {
-            // 使用 setPlainText() 或 setHtml() 来更新文本
-            QString labelText = QString("%1:%2\n%3级")
-                                    .arg(piles[i].allocatedNodes.size())
-                                    .arg(piles[i].requiredNodes)
-                                    .arg(piles[i].priority);
-            m_pileLabelItems[i]->setPlainText(labelText);
-        }
-        else if (m_pileItems[i] && piles[i].state == PILE_IDLE)
-        {
-            QString labelText = QString("- : -\n-");
-            m_pileLabelItems[i]->setPlainText(labelText);
+            if (pile.state == PILE_CHARGING)
+            {
+                QString labelText = QString("%1:%2\n%3级")
+                                        .arg(pile.allocatedNodes.size())
+                                        .arg(pile.requiredNodes)
+                                        .arg(pile.priority);
+                m_pileLabelItems[i]->setPlainText(labelText);
+            }
+            else
+            {
+                m_pileLabelItems[i]->setPlainText(QString("- : -\n-"));
+            }
+            m_pileLabelItems[i]->setDefaultTextColor(Qt::black);
+            // 调整位置
+            QPointF pos = m_pileItems[i]->pos();
+            m_pileLabelItems[i]->setPos(pos.x() - 24, pos.y() + 20);
         }
     }
 }
