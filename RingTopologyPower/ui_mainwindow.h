@@ -50,6 +50,7 @@ public:
     QHBoxLayout *horizontalLayout_4;
     QPushButton *requestButton;
     QPushButton *releaseButton;
+    QPushButton *stopChargeButton;
     QLabel *label_5;
     QListWidget *nodeListWidget;
     QHBoxLayout *horizontalLayout_5;
@@ -172,6 +173,11 @@ public:
 
         horizontalLayout_4->addWidget(releaseButton);
 
+        stopChargeButton = new QPushButton(centralwidget);
+        stopChargeButton->setObjectName(QString::fromUtf8("stopChargeButton"));
+
+        horizontalLayout_4->addWidget(stopChargeButton);
+
         verticalLayout->addLayout(horizontalLayout_4);
 
         label_5 = new QLabel(centralwidget);
@@ -276,6 +282,7 @@ public:
         loadStateButton->setText(QApplication::translate("MainWindow", "加载工况", nullptr));
         label_unitPower->setText(QApplication::translate("MainWindow", "单机功率:", nullptr));
         unitPowerSpinBox->setSuffix(QApplication::translate("MainWindow", " kW", nullptr));
+        stopChargeButton->setText(QApplication::translate("MainWindow", "停止充电", nullptr));
 
     } // retranslateUi
 };

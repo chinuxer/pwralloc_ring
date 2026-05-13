@@ -63,6 +63,7 @@ MainWindow::MainWindow(QWidget *parent)
             this, &MainWindow::onTopologyChanged);
     connect(ui->saveStateButton, &QPushButton::clicked, this, &MainWindow::onSaveStateClicked);
     connect(ui->loadStateButton, &QPushButton::clicked, this, &MainWindow::onLoadStateClicked);
+    connect(ui->stopChargeButton, &QPushButton::clicked, this, &MainWindow::onStopChargeClicked);
     // 初始配置
     onApplyConfigClicked();
 
@@ -132,7 +133,12 @@ MainWindow::MainWindow(QWidget *parent)
         color: #a0e0ff;
         selection-background-color: #2a82da;
     }
-
+    QMessageBox {
+    color: #415b96; /* 对话框整体文字颜色 */
+    }
+    QMessageBox QLabel {
+    color: #ff0000; /* 仅消息文本颜色 */
+    }
     /* 标签 */
     QLabel {
         color: #a3ccf5;
@@ -171,6 +177,15 @@ MainWindow::MainWindow(QWidget *parent)
     QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {
         height: 0px;
     }
+
+    QMessageBox QPushButton {
+    min-width: 40px;      /* 最小宽度 */
+    max-width: 60px;      /* 最大宽度 */
+    min-height: 12px;     /* 最小高度 */
+    max-height: 14px;     /* 最大高度 */
+    padding: 4px 8px;     /* 内边距 */
+    font-size: 9pt;      /* 字体稍小 */
+    }
 )";
 
     this->setStyleSheet(styleSheet);
@@ -202,7 +217,7 @@ void MainWindow::onApplyConfigClicked()
     }
     if (unitPower <= 0 || unitPower > 2000)
     {
-        QMessageBox::warning(this, "配置错误", "单桩功率必须大于0 小于200");
+        QMessageBox::warning(this, "配置错误", "单桩功率必须大于0kW 小于200kW");
         return;
     }
     ui->nodeListWidget->clear();
@@ -304,6 +319,24 @@ void MainWindow::onReleasePowerClicked()
     ui->logTextEdit->append(QString("→ 充电桩%1 释放 %2kW 功率").arg(pileId).arg(power));
 }
 
+void MainWindow::onStopChargeClicked()
+{
+    int pileId = ui->pileComboBox->currentIndex() + 1;
+    if (pileId < 1 || pileId > m_topology->getChargingPiles().size())
+    {
+        QMessageBox::warning(this, "错误", "请选择有效的充电桩");
+        return;
+    }
+    const auto &piles = m_topology->getChargingPiles();
+    if (piles[pileId - 1].state != PILE_CHARGING)
+    {
+        QMessageBox::warning(this, "错误", "请选择正在充电的充电桩");
+        return;
+    }
+
+    m_topology->stopCharging(pileId);
+    ui->logTextEdit->append(QString("→ 充电桩%1 已结束充电").arg(pileId));
+}
 void MainWindow::onPileSelectionChanged(int index)
 {
     if (index < 0)
@@ -425,7 +458,7 @@ void MainWindow::onLoadStateClicked()
         QMessageBox::warning(this, "错误", "无效的JSON文件");
         return;
     }
-
+    onApplyConfigClicked();
     bool ok = m_topology->loadState(doc.object());
     if (ok)
     {

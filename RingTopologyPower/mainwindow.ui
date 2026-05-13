@@ -180,6 +180,13 @@
           </property>
          </widget>
         </item>
+        <item>
+        <widget class="QPushButton" name="stopChargeButton">
+        <property name="text">
+         <string>结束充电</string>
+        </property>
+        </widget>
+        </item>
        </layout>
       </item>
       <item>

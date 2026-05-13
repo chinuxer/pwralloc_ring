@@ -29,6 +29,7 @@ private slots:
     void onApplyConfigClicked();
     void onRequestPowerClicked();
     void onReleasePowerClicked();
+    void onStopChargeClicked();
     void onPileSelectionChanged(int index);
     void onTopologyChanged();
     void onPriorityChanged();

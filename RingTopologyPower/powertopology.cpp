@@ -272,12 +272,16 @@ int SimpleTopology::makesScores(Senario senario, int pileId, int neighborPileId,
 
     int get_hops_occupied(int start, int nodeid, int pileid);
     int score = 0;
+    int shortage = 0;
     switch (senario)
     {
     case SENARIO_INHERIT:
-        score += WEIGHT_1 * m_piles[neighborPileId - 1].allocatedNodes.size();
-        score += WEIGHT_3 * (WEIGHT_HIERARCHY - m_piles[neighborPileId - 1].priority % WEIGHT_HIERARCHY);
-        score += WEIGHT_4 * ((m_piles[neighborPileId - 1].requiredNodes - m_piles[neighborPileId - 1].allocatedNodes.size()) % WEIGHT_HIERARCHY);
+        score += WEIGHT_1 * (WEIGHT_HIERARCHY * WEIGHT_HIERARCHY - 1 - m_piles[neighborPileId - 1].allocatedNodes.size());
+        score += WEIGHT_3 * (m_piles[neighborPileId - 1].priority % WEIGHT_HIERARCHY);
+        shortage = m_piles[neighborPileId - 1].requiredNodes - m_piles[neighborPileId - 1].allocatedNodes.size();
+        shortage = shortage < 0 ? 0 : shortage;
+        shortage = shortage >= WEIGHT_HIERARCHY ? WEIGHT_HIERARCHY - 1 : shortage;
+        score += WEIGHT_4 * (shortage % WEIGHT_HIERARCHY);
         score = (pileId == neighborPileId) ? 0 : score; // 如果邻居节点所属充电桩与当前充电桩相同,则得分为0,不进行继承
         return score;
     case SENARIO_PREEMPT:
@@ -322,6 +326,10 @@ void SimpleTopology::inheritor(int pileId, const QVector<int> &nodeIds_to_releas
 
     for (int nodeId : nodeIds_to_release)
     {
+        if (nodeId < 0 || nodeId > m_nodes.size() || m_nodes[nodeId - 1].state != NODE_IDLE)
+        {
+            continue;
+        }
         QVector<int> pileScores;
         pileScores.resize(m_piles.size());
         pileScores.fill(-1);
@@ -339,7 +347,7 @@ void SimpleTopology::inheritor(int pileId, const QVector<int> &nodeIds_to_releas
             if (pileScores[neighborPileId - 1] == -1)
             {
                 pileScores[neighborPileId - 1] = score;
-                qInfo() << "充电桩" << neighborPileId << "得分:" << score;
+                qInfo() << "对于继承节点" << nodeId << ",充电桩" << neighborPileId << "得分:" << score;
             }
         }
         int bestPileId = 0;
@@ -366,16 +374,11 @@ void SimpleTopology::inheritor(int pileId, const QVector<int> &nodeIds_to_releas
 }
 
 // 遍历释放节点中是否有特征节点(特征为三个邻节点中有与释放节点所属充电桩id相同的节点,有一个是空节点,有一个占用桩存在功率欠额大于等于两个节点)
-bool SimpleTopology::maneuver_ReleasedNodes(int pileId, const QVector<int> &nodeIds_to_release)
+bool SimpleTopology::maneuver_ReleasedNodes(int pileId)
 {
     if (pileId < 1 || pileId > m_piles.size())
     {
         qWarning() << "无效的充电桩ID:" << pileId;
-        return false;
-    }
-    if (nodeIds_to_release.isEmpty())
-    {
-        qWarning() << "没有指定要释放的节点";
         return false;
     }
 
@@ -388,16 +391,28 @@ bool SimpleTopology::maneuver_ReleasedNodes(int pileId, const QVector<int> &node
         int pileId;
         int deficit;
         int priority;
+        int idle_neighborId;
     };
     QVector<CandidateNode> CandidateNodes;
-    for (int nodeId : nodeIds_to_release)
+    for (int nodeId = 1; nodeId <= m_nodes.size(); nodeId++)
     {
         int deficit = 0;
         int priority = 0;
         int occupiedPileId = 0;
+        int idle_neighborId = 0;
+        if (m_nodes[nodeId - 1].state != NodeState::NODE_OCCUPIED)
+        {
+            continue;
+        }
+
+        occupiedPileId = m_nodes[nodeId - 1].chargerId;
+        // 如果是直连基节点
+        if (m_piles[occupiedPileId - 1].connectedNode == nodeId)
+        {
+            continue;
+        }
         // 1. Get the 3 neighbors of the released node
-        QVector<int>
-            neighbors;
+        QVector<int> neighbors;
         getNeighbors(nodeId, neighbors);
 
         if (neighbors.size() != 3)
@@ -416,32 +431,32 @@ bool SimpleTopology::maneuver_ReleasedNodes(int pileId, const QVector<int> &node
                 continue;
 
             PowerNode &neighborNode = m_nodes[neighborId - 1];
-            occupiedPileId = neighborNode.chargerId;
+
             // Check Feature 1: Empty Node
             if (neighborNode.state == NODE_IDLE)
             {
                 hasIdleNeighbor = true;
+                idle_neighborId = neighborId;
             }
             // Check Occupied Nodes
             else if (neighborNode.state == NODE_OCCUPIED)
             {
-                int neighborPileId = neighborNode.chargerId;
 
                 // Check Feature 2: Same Pile Neighbor
-                if (neighborPileId == occupiedPileId)
+                if (neighborNode.chargerId == occupiedPileId)
                 {
                     hasSamePileNeighbor = true;
                 }
                 // Check Feature 3: Other Pile with Significant Deficit
-                else if (neighborPileId >= 1 && neighborPileId <= m_piles.size())
+                else
                 {
-                    ChargingPile &nPool = m_piles[neighborPileId - 1];
+                    ChargingPile &nPool = m_piles[neighborNode.chargerId - 1];
                     deficit = nPool.requiredNodes - nPool.allocatedNodes.size();
 
                     if (deficit >= MIN_DEFICIT_NODES)
                     {
                         hasSignificantDeficit = true;
-                        priority = m_piles[neighborPileId - 1].priority;
+                        priority = nPool.priority;
                     }
                 }
             }
@@ -451,7 +466,7 @@ bool SimpleTopology::maneuver_ReleasedNodes(int pileId, const QVector<int> &node
         if (hasSamePileNeighbor && hasIdleNeighbor && hasSignificantDeficit)
         {
             // Select the best candidate pile (Highest Deficit, then Highest Priority)
-            CandidateNodes.append({nodeId, occupiedPileId, deficit, priority});
+            CandidateNodes.append({nodeId, occupiedPileId, deficit, priority, idle_neighborId});
         }
     }
     if (!CandidateNodes.isEmpty())
@@ -462,12 +477,39 @@ bool SimpleTopology::maneuver_ReleasedNodes(int pileId, const QVector<int> &node
 
         if (bestCandidate.id >= 1 && bestCandidate.id <= m_piles.size())
         {
-            bool res = allocateNodes_auto(bestCandidate.pileId, m_config.unitPower);
+            releaseNodeFromPile(bestCandidate.id, bestCandidate.pileId);
+            bool res = allocateNodes_auto(bestCandidate.pileId, m_piles[bestCandidate.pileId].allocatedNodes.size() + 1);
             if (res)
             {
                 qInfo() << "动态调优结果:充电桩" << bestCandidate.pileId << "转移节点" << bestCandidate.id << "保持桩功率正常";
-                releaseNodeFromPile(bestCandidate.id, bestCandidate.pileId);
+
                 return true;
+            }
+            else
+            {
+                allocateNodes_manu(bestCandidate.id, bestCandidate.pileId); // 回退占据这个节点
+                // 如果那个空闲节点的邻居节点（除bestCandidate.id外)有一个被占据充电桩号和当前节点被占据充电桩号相等，则占据这个空闲节点
+                QVector<int> _neighbors_;
+                getNeighbors(bestCandidate.idle_neighborId, _neighbors_);
+                if (_neighbors_.size() > 0)
+                {
+                    for (int i = 0; i < _neighbors_.size(); i++)
+                    {
+                        int _neighborId_ = _neighbors_[i];
+                        if (_neighborId_ == bestCandidate.id)
+                        {
+                            continue;
+                        }
+                        if (m_nodes[_neighborId_ - 1].state == NODE_OCCUPIED)
+                        {
+                            if (m_nodes[_neighborId_ - 1].chargerId == m_nodes[bestCandidate.id - 1].chargerId)
+                            {
+                                allocateNodes_manu(bestCandidate.idle_neighborId, m_nodes[_neighborId_ - 1].chargerId); // 占据这个空闲节点
+                                qInfo() << "动态调优结果:充电桩" << m_nodes[_neighborId_ - 1].chargerId << "转移节点" << bestCandidate.id << "到" << bestCandidate.idle_neighborId << "保持桩功率正常";
+                            }
+                        }
+                    }
+                }
             }
         }
     }
@@ -583,11 +625,27 @@ bool SimpleTopology::requestPower(int pileId, int requiredPower)
     if (pile.state == PILE_IDLE && node.state == NODE_OCCUPIED)
     {
         bool res = releaseNodes_manu(pile.connectedNode);
+        allocateNodeToPile(pile.connectedNode, pileId);
+        pile.state = PILE_CHARGING;
+        quota -= 1;
         if (res)
         {
-            allocateNodeToPile(pile.connectedNode, pileId);
-            pile.state = PILE_CHARGING;
-            quota -= 1;
+            QVector<int> idleNodes;
+            idleNodes.clear();
+
+            for (int i = 0; i < m_nodes.size(); ++i)
+            {
+                if (m_nodes[i].state == NODE_IDLE)
+                {
+                    idleNodes.append(i + 1);
+                }
+            }
+
+            int cnt = idleNodes.size();
+            while (cnt-- > 0)
+            {
+                inheritor(pileId, idleNodes);
+            }
         }
     }
 
@@ -670,13 +728,17 @@ void SimpleTopology::releasePower(int pileId, int powerToRelease)
     // }
     // cnt++;
     // }
+
     // 找到所有空节点
+    // maneuver_ReleasedNodes(pileId);
     QVector<int> idleNodes;
     idleNodes.clear();
+    qInfo() << "空闲节点:";
     for (int i = 0; i < m_nodes.size(); ++i)
     {
         if (m_nodes[i].state == NODE_IDLE)
         {
+            qInfo() << i + 1 << " ";
             idleNodes.append(i + 1);
         }
     }
@@ -685,8 +747,13 @@ void SimpleTopology::releasePower(int pileId, int powerToRelease)
         qWarning() << "没有空闲节点";
         return;
     }
-    inheritor(pileId, idleNodes);
 
+    int cnt = idleNodes.size();
+    while (cnt-- > 0)
+    {
+
+        inheritor(pileId, idleNodes);
+    }
     emit topologyChanged();
 }
 
@@ -960,11 +1027,16 @@ bool SimpleTopology::releaseNodes_manu(int nodeId)
             nodesToRelease.append(allocatedNodeId);
         }
     }
+    releaseNodeFromPile(nodeId, pileId);
+    if (nodesToRelease.size() <= 0)
+    {
+        return false;
+    }
     for (int allocatedNodeId : nodesToRelease)
     {
         releaseNodeFromPile(allocatedNodeId, pileId);
     }
-    releaseNodeFromPile(nodeId, pileId);
+
     return true;
 }
 
@@ -1021,6 +1093,7 @@ QJsonObject SimpleTopology::saveState() const
         pileObj["id"] = pile.id;
         pileObj["priority"] = pile.priority;
         pileObj["requiredPower"] = pile.requiredPower;
+        pileObj["requiredNodes"] = pile.requiredNodes;
         pileObj["state"] = (pile.state == PILE_CHARGING) ? "charging" : "idle";
         // 保存已分配的节点列表
         QJsonArray allocatedArray;
@@ -1059,16 +1132,19 @@ bool SimpleTopology::loadState(const QJsonObject &state)
     }
 
     // 2. 先完全清空所有节点的占用状态
-    for (PowerNode &node : m_nodes)
+
+    for (int i = 0; i < m_config.nodeCount; i++)
     {
-        node.state = NODE_IDLE;
-        node.chargerId = -1;
+        m_nodes[i].state = NODE_IDLE;
+        m_nodes[i].chargerId = -1;
     }
-    for (ChargingPile &pile : m_piles)
+    for (int i = 0; i < m_config.pileCount; i++)
     {
-        pile.state = PILE_IDLE;
-        pile.requiredPower = 0;
-        pile.allocatedNodes.clear();
+        m_piles[i].priority = 0;
+        m_piles[i].requiredPower = 0;
+        m_piles[i].requiredNodes = 0;
+        m_piles[i].state = PILE_IDLE;
+        m_piles[i].allocatedNodes.clear();
     }
 
     // 3. 恢复充电桩优先级、需求功率
@@ -1083,6 +1159,7 @@ bool SimpleTopology::loadState(const QJsonObject &state)
         ChargingPile &pile = m_piles[id - 1];
         pile.priority = pileObj["priority"].toInt();
         pile.requiredPower = pileObj["requiredPower"].toInt();
+        pile.requiredNodes = pileObj["requiredNodes"].toInt();
         pile.state = (pileObj["state"].toString() == "charging") ? PILE_CHARGING : PILE_IDLE;
 
         // 恢复已分配的节点
@@ -1114,15 +1191,20 @@ bool SimpleTopology::loadState(const QJsonObject &state)
     // 复制locked状态
     QJsonArray lockedArray = state["locked"].toArray();
     set_locked(0, 0);
-    for (int i = 1; i <= lockedArray.size(); i++)
+    for (int i = 1; i <= m_config.nodeCount; i++)
     {
-        set_locked(lockedArray[i].toInt(), i);
+        int pileId = lockedArray[i].toInt();
+        if (pileId < 1 || pileId > m_config.pileCount)
+        {
+            continue;
+        }
+        set_locked(pileId, i);
     }
 
     // 4. 更新接触器状态（根据新的节点分配重新计算）
     for (int pileId = 1; pileId <= m_piles.size(); ++pileId)
     {
-        if (m_piles[pileId].state == PILE_CHARGING)
+        if (m_piles[pileId - 1].state == PILE_CHARGING)
         {
             updateContactorStates(pileId, 0); // 0 表示更新该充电桩的所有接触器
         }
@@ -1130,4 +1212,35 @@ bool SimpleTopology::loadState(const QJsonObject &state)
 
     emit topologyChanged();
     return true;
+}
+
+void SimpleTopology::stopCharging(int pileId)
+{
+    if (pileId < 1 || pileId > m_piles.size())
+    {
+        qWarning() << "无效的充电桩ID:" << pileId;
+        return;
+    }
+
+    ChargingPile &pile = m_piles[pileId - 1];
+    if (pile.state != PILE_CHARGING && pile.allocatedNodes.isEmpty())
+    {
+        qInfo() << "充电桩" << pileId << "已经空闲，无需结束充电";
+        return;
+    }
+
+    // 释放所有已分配的节点
+    releasePower(pileId, pile.requiredPower);
+
+    // 清空功率需求并设置状态为空闲
+    pile.requiredPower = 0;
+    pile.requiredNodes = 0;
+    pile.state = PILE_IDLE;
+
+    // 更新接触器状态（该桩不再占用任何节点，所有与其相关的接触器应断开）
+    updateContactorStates(pileId, 0);
+
+    qInfo() << "充电桩" << pileId << "已结束充电，释放所有节点";
+
+    emit topologyChanged();
 }

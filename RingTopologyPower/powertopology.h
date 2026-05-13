@@ -122,7 +122,7 @@ public:
     void releasePower(int pileId, int powerToRelease) override;
     void allocateNodeToPile(int nodeId, int pileId) override;
     void releaseNodeFromPile(int nodeId, int pileId) override;
-    bool maneuver_ReleasedNodes(int pileId, const QVector<int> &nodeIds_to_release);
+    bool maneuver_ReleasedNodes(int pileId);
     void inheritor(int pileId, const QVector<int> &nodeIds_to_release);
     QVector<int> getNodePriority(int pileId) override;
     void getNeighbors(int nodeId, QVector<int> &result);
@@ -131,7 +131,8 @@ public:
     // 手动操作接口（用于测试）
     void allocateNodes_manu(int nodeId, int pileId);
     bool releaseNodes_manu(int nodeId);
-
+    // 结束充电：释放该桩所有占用节点，清空需求功率，置为空闲状态
+    void stopCharging(int pileId);
     int makesScores(Senario scenario, int pileId, int neighborPileId, int nodeId, int neighborNodeId);
 public slots:
     // 设置充电桩优先级
