@@ -3,13 +3,21 @@
 #include "powertopology.h"
 #include <QDebug>
 #include <QMessageBox>
+#include <QMenuBar>
+#include <QMenu>
+#include <QAction>
 #include <QGraphicsTextItem>
 #include <cmath>
 #include <qnamespace.h>
 #include <QFileDialog>
 #include <QJsonDocument>
 #include <QJsonObject>
-
+#include <QLabel>
+#include <QDialog>
+#include <QVBoxLayout>
+#include <QFrame>
+#include <QPushButton>
+#include <QPixmap>
 // 辅助函数：根据背景颜色自动选择黑色或白色文字
 static QColor getContrastColor(const QColor &bgColor)
 {
@@ -64,6 +72,7 @@ MainWindow::MainWindow(QWidget *parent)
     connect(ui->saveStateButton, &QPushButton::clicked, this, &MainWindow::onSaveStateClicked);
     connect(ui->loadStateButton, &QPushButton::clicked, this, &MainWindow::onLoadStateClicked);
     connect(ui->stopChargeButton, &QPushButton::clicked, this, &MainWindow::onStopChargeClicked);
+    connect(ui->toggleNodeEnableButton, &QPushButton::clicked, this, &MainWindow::onToggleNodeEnableClicked);
     // 初始配置
     onApplyConfigClicked();
 
@@ -137,7 +146,7 @@ MainWindow::MainWindow(QWidget *parent)
     color: #415b96; /* 对话框整体文字颜色 */
     }
     QMessageBox QLabel {
-    color: #ff0000; /* 仅消息文本颜色 */
+    color: #b6e1e9; /* 仅消息文本颜色 */
     }
     /* 标签 */
     QLabel {
@@ -189,6 +198,11 @@ MainWindow::MainWindow(QWidget *parent)
 )";
 
     this->setStyleSheet(styleSheet);
+    QMenuBar *menuBar = new QMenuBar(this);
+    QMenu *helpMenu = menuBar->addMenu(tr("帮助(&H)"));
+    QAction *aboutAction = helpMenu->addAction(tr("关于(&A)"));
+    connect(aboutAction, &QAction::triggered, this, &MainWindow::showAboutDialog);
+    setMenuBar(menuBar);
 }
 
 MainWindow::~MainWindow()
@@ -294,7 +308,7 @@ void MainWindow::onRequestPowerClicked()
 
     if (success)
     {
-        ui->logTextEdit->append(QString("✓ 充电桩%1 (优先级%2) 请求 %3kW 功率成功").arg(pileId).arg(priority).arg(power));
+        ui->logTextEdit->append(QString("✓ 充电桩%1 (优先级%2) 请求 %3kW 功率成功").arg(pileId).arg(priority).arg(power / 10.0, 0, 'f', 1));
     }
     else
     {
@@ -316,7 +330,7 @@ void MainWindow::onReleasePowerClicked()
     // 调用算法接口（后续实现）
     m_topology->releasePower(pileId, power);
 
-    ui->logTextEdit->append(QString("→ 充电桩%1 释放 %2kW 功率").arg(pileId).arg(power));
+    ui->logTextEdit->append(QString("→ 充电桩%1 释放 %2kW 功率").arg(pileId).arg(power / 10.0, 0, 'f', 1));
 }
 
 void MainWindow::onStopChargeClicked()
@@ -352,7 +366,7 @@ void MainWindow::onPileSelectionChanged(int index)
         ui->pileInfoTextEdit->setPlainText(
             QString("充电桩 %1\n"
                     "状态: %2\n"
-                    "连接节点: %3\n"
+                    "直连节点: %3\n"
                     "需求功率: %4kW\n"
                     "需求节点数: %5\n"
                     "占用节点数: %6\n"
@@ -360,8 +374,9 @@ void MainWindow::onPileSelectionChanged(int index)
                 .arg(pile.id)
                 .arg(pile.state == PILE_CHARGING ? "充电中" : "空闲")
                 .arg(pile.connectedNode)
-                .arg(pile.requiredPower)
+                .arg(pile.requiredPower / 10.0, 0, 'f', 1)
                 .arg(pile.requiredNodes)
+                .arg(pile.allocatedNodes.size() - pile.disabledNodes.size())
                 .arg(pile.priority));
 
         // 同步优先级选择框的值
@@ -387,6 +402,9 @@ void MainWindow::onTopologyChanged()
 {
     updateGraphics();
     updateStatusDisplay();
+    // 获取当前pileselect的索引
+    int index = ui->pileComboBox->currentIndex();
+    onPileSelectionChanged(index);
 }
 
 void MainWindow::onAllocateNodeClicked()
@@ -588,7 +606,7 @@ void MainWindow::setupGraphicsScene()
 
         // 充电桩状态标签（显示节点数/优先级）
         QGraphicsTextItem *statusLabel = new QGraphicsTextItem();
-        statusLabel->setFont(QFont("Arial", 10, QFont::Bold));
+        statusLabel->setFont(QFont("Arial", 8, QFont::Bold));
         statusLabel->setDefaultTextColor(Qt::white); // 临时颜色
         statusLabel->setZValue(1);
         m_scene->addItem(statusLabel);
@@ -596,7 +614,7 @@ void MainWindow::setupGraphicsScene()
 
         // 亚克力框（背景框）
         QGraphicsPathItem *backgroundBox = new QGraphicsPathItem();
-        int boxWidth = 60;
+        int boxWidth = 70;
         int boxHeight = 40;
         QPainterPath path;
         path.addRoundedRect(QRectF(0, 0, boxWidth, boxHeight), 3, 3);
@@ -619,7 +637,7 @@ void MainWindow::setupGraphicsScene()
 
     // 标题
     QGraphicsTextItem *title = new QGraphicsTextItem(
-        QString("%1kW环形拓扑功率分配演示系统  %2节点 %3充电桩").arg(config.nodeCount * config.unitPower / 10).arg(config.nodeCount).arg(config.pileCount));
+        QString("%1kW功率分配系统 %2节点 %3充电桩").arg(config.nodeCount * config.unitPower / 10).arg(config.nodeCount).arg(config.pileCount));
     title->setPos(140, 700);
     title->setDefaultTextColor(Qt::lightGray);
     title->setFont(QFont("Arial", 11, QFont::Bold));
@@ -647,9 +665,10 @@ void MainWindow::updateGraphics()
                 brush = piles[chargerIndex].color;
             }
         }
-        else if (node.state == NODE_FAULT)
+
+        else if (node.state == NODE_DISABLED)
         {
-            brush = Qt::darkRed;
+            brush = QColor(15, 20, 34); // 深灰色
         }
 
         if (m_nodeItems[i])
@@ -773,9 +792,12 @@ void MainWindow::updateGraphics()
         {
             if (pile.state == PILE_CHARGING)
             {
-                QString labelText = QString("%1:%2\n%3级")
-                                        .arg(pile.allocatedNodes.size())
+                // Format %3 as a float with 1 decimal place
+                // Assuming requiredPower is in units of 0.1kW, so divide by 10.0
+                QString labelText = QString("%1:%2 %3\n%4级")
+                                        .arg(pile.allocatedNodes.size() - pile.disabledNodes.size())
                                         .arg(pile.requiredNodes)
+                                        .arg(pile.requiredPower / 10.0, 0, 'f', 1) // Float format, 1 decimal place
                                         .arg(pile.priority);
                 m_pileLabelItems[i]->setPlainText(labelText);
             }
@@ -784,9 +806,10 @@ void MainWindow::updateGraphics()
                 m_pileLabelItems[i]->setPlainText(QString("- : -\n-"));
             }
             m_pileLabelItems[i]->setDefaultTextColor(Qt::black);
-            // 调整位置
+
+            // Adjust position if necessary due to font size change
             QPointF pos = m_pileItems[i]->pos();
-            m_pileLabelItems[i]->setPos(pos.x() - 24, pos.y() + 20);
+            m_pileLabelItems[i]->setPos(pos.x() - 35, pos.y() + 20);
         }
     }
 }
@@ -812,24 +835,27 @@ void MainWindow::updateStatusDisplay()
 
         statusText += QString("桩%1: %2/%3 [%4]\n")
                           .arg(pile.id)
-                          .arg(pile.allocatedNodes.size())
+                          .arg(pile.allocatedNodes.size() - pile.disabledNodes.size())
                           .arg(pile.requiredNodes)
                           .arg(nodeList.isEmpty() ? "无节点" : nodeList);
     }
 
     // 节点状态
     statusText += "\n=== 节点状态 ===\n";
-    int occupied = 0, idle = 0;
+    int occupied = 0, idle = 0, disabled = 0;
     for (const auto &node : nodes)
     {
         if (node.state == NODE_OCCUPIED)
             occupied++;
         else if (node.state == NODE_IDLE)
             idle++;
+        else if (node.state == NODE_DISABLED)
+            disabled++;
     }
-    statusText += QString("占用: %1 | 空闲: %2 | 总数: %3\n")
+    statusText += QString("占用: %1 | 空闲: %2 | 禁用: %3 | 总数: %4\n")
                       .arg(occupied)
                       .arg(idle)
+                      .arg(disabled)
                       .arg(nodes.size());
 
     ui->statusTextEdit->setPlainText(statusText);
@@ -893,4 +919,82 @@ QPointF MainWindow::calculatePilePosition(int pileIndex)
 
 void MainWindow::drawGrid(const QRectF &r)
 {
+}
+
+void MainWindow::showAboutDialog()
+{
+    QDialog aboutDialog(this);
+    aboutDialog.setWindowTitle(tr("关于本软件"));
+    aboutDialog.setMinimumSize(500, 400);
+
+    QVBoxLayout *layout = new QVBoxLayout(&aboutDialog);
+
+    // 软件图标（可选，可放置一个 QLabel 显示图片）
+    QLabel *iconLabel = new QLabel();
+    iconLabel->setPixmap(QPixmap(":/icon.png").scaled(64, 64, Qt::KeepAspectRatio, Qt::SmoothTransformation));
+    iconLabel->setAlignment(Qt::AlignCenter);
+    layout->addWidget(iconLabel);
+
+    // 软件名称和版本
+    QLabel *titleLabel = new QLabel(tr("<h2>allocyclus</h2>"));
+    titleLabel->setAlignment(Qt::AlignCenter);
+    layout->addWidget(titleLabel);
+
+    QLabel *versionLabel = new QLabel(tr("版本：1.0.1"));
+    versionLabel->setAlignment(Qt::AlignCenter);
+    layout->addWidget(versionLabel);
+
+    // 版权信息
+    QLabel *copyrightLabel = new QLabel(tr("© 2026 袁博"));
+    copyrightLabel->setAlignment(Qt::AlignCenter);
+    layout->addWidget(copyrightLabel);
+
+    // 分隔线
+    QFrame *line = new QFrame();
+    line->setFrameShape(QFrame::HLine);
+    line->setFrameShadow(QFrame::Sunken);
+    layout->addWidget(line);
+
+    // 描述文字
+    QLabel *descLabel = new QLabel(tr(
+        "\n直流充电桩环形拓扑功率分配演示系统\n"
+        "用于教学、开发思路验证及图论算法研究\n\n"
+        "本软件仅供非商业用途使用，不作为开发者所在公司售卖产品\n详情见免责声明"));
+    descLabel->setAlignment(Qt::AlignCenter);
+    descLabel->setWordWrap(true);
+    layout->addWidget(descLabel);
+
+    // 开发者联系方式
+    QLabel *contactLabel = new QLabel(tr(
+        ""));
+    contactLabel->setOpenExternalLinks(true);
+    contactLabel->setAlignment(Qt::AlignCenter);
+    layout->addWidget(contactLabel);
+
+    // 关闭按钮
+    QPushButton *closeBtn = new QPushButton(tr("关闭"));
+    connect(closeBtn, &QPushButton::clicked, &aboutDialog, &QDialog::accept);
+    layout->addWidget(closeBtn, 0, Qt::AlignCenter);
+
+    aboutDialog.exec();
+}
+void MainWindow::onToggleNodeEnableClicked()
+{
+    if (m_selectedNode <= 0)
+    {
+        QMessageBox::warning(this, "错误", "请先选择一个节点");
+        return;
+    }
+
+    bool enabled = m_topology->toggleNodeEnabled(m_selectedNode);
+    if (enabled)
+    {
+        ui->logTextEdit->append(QString("→ 节点%1 已启用").arg(m_selectedNode));
+    }
+    else
+    {
+        ui->logTextEdit->append(QString("→ 节点%1 已禁用").arg(m_selectedNode));
+    }
+    // 刷新图形显示
+    onTopologyChanged();
 }

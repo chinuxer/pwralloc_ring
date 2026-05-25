@@ -13,7 +13,7 @@ enum NodeState
 {
     NODE_IDLE = 0,
     NODE_OCCUPIED,
-    NODE_FAULT
+    NODE_DISABLED // 节点不可用
 };
 
 // 充电桩状态
@@ -60,6 +60,7 @@ struct ChargingPile
     int requiredPower;        // 需求功率 (kW)
     int requiredNodes;        // 需求节点数
     QSet<int> allocatedNodes; // 已分配的节点
+    QSet<int> disabledNodes;  // 禁用的节点(在已分配列表中 但并不计入节点数)
     QColor color;             // 显示颜色
 };
 
@@ -87,10 +88,10 @@ public:
     virtual void releasePower(int pileId, int powerToRelease) = 0;
 
     // 分配节点给充电桩 - 供策略调用
-    virtual void allocateNodeToPile(int nodeId, int pileId) = 0;
+    virtual void allocateNodeToPile(int nodeId, int pileId, bool emit_signal) = 0;
 
     // 从充电桩释放节点 - 供策略调用
-    virtual void releaseNodeFromPile(int nodeId, int pileId) = 0;
+    virtual void releaseNodeFromPile(int nodeId, int pileId, bool emit_signal) = 0;
 
     // 获取节点优先级列表 - 需要后续实现具体的优先级算法
     virtual QVector<int> getNodePriority(int pileId) = 0;
@@ -120,10 +121,15 @@ public:
     bool preemptor(int pileId, int requiredPower);
     bool requestPower(int pileId, int requiredPower) override;
     void releasePower(int pileId, int powerToRelease) override;
-    void allocateNodeToPile(int nodeId, int pileId) override;
-    void releaseNodeFromPile(int nodeId, int pileId) override;
-    bool maneuver_ReleasedNodes(int pileId);
+    bool toggleNodeEnabled(int nodeId);
+    void allocateNodeToPile(int nodeId, int pileId, bool emit_signal) override;
+    void releaseNodeFromPile(int nodeId, int pileId, bool emit_signal) override;
+    bool maneuver_ReleasedNodes(void);
     void inheritor(int pileId, const QVector<int> &nodeIds_to_release);
+    void chargingNodedisabled(int nodeId);
+    int get_count_charging_nodes(int pileId);
+
+    int find_euelect_index(int pileid, int startid);
     QVector<int> getNodePriority(int pileId) override;
     void getNeighbors(int nodeId, QVector<int> &result);
     QJsonObject saveState() const;

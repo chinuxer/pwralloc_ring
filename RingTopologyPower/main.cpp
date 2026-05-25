@@ -1,8 +1,15 @@
 #include "mainwindow.h"
+#include "telnetconsole.h"
 #include <QApplication>
 #include <QDebug>
-#include "telnetconsole.h"
-
+#include <QMessageBox>
+#include <QDialog>
+#include <QVBoxLayout>
+#include <QTextEdit>
+#include <QDialogButtonBox>
+#include <QFile>
+#include <QTextStream>
+#include <QPushButton>
 // 全局指针，用于消息处理器访问
 static TelnetConsole *g_telnetConsole = nullptr;
 
@@ -63,10 +70,86 @@ void messageHandler(QtMsgType type, const QMessageLogContext &context, const QSt
     }
 }
 
+// 显示免责声明对话框，返回 true 表示用户接受，false 表示拒绝
+static bool showDisclaimer()
+{
+    // 从资源文件中读取免责文本
+    QFile file(":/disclaimer.txt"); // 冒号+斜杠表示资源系统
+    if (!file.open(QIODevice::ReadOnly | QIODevice::Text))
+    {
+        QMessageBox::critical(nullptr, "启动失败",
+                              "无法加载免责声明资源，程序将退出。");
+        return false;
+    }
+
+    QTextStream stream(&file);
+    stream.setCodec("UTF-8");
+    QString disclaimerText = stream.readAll();
+    file.close();
+
+    // 创建对话框
+    QDialog dialog;
+    dialog.setWindowTitle("免责声明");
+    dialog.setMinimumSize(650, 550);
+
+    QVBoxLayout *layout = new QVBoxLayout(&dialog);
+
+    QTextEdit *textEdit = new QTextEdit();
+    textEdit->setReadOnly(true);
+    textEdit->setPlainText(disclaimerText);
+    textEdit->setStyleSheet(
+        "QTextEdit {"
+        "    background-color: #15232e;"
+        "    color: #b7daeb;"
+        "    font-family: 'Microsoft YaHei', 'SimHei';"
+        "    font-size: 11pt;"
+        "}");
+    layout->addWidget(textEdit);
+
+    QDialogButtonBox *buttonBox = new QDialogButtonBox(QDialogButtonBox::Yes | QDialogButtonBox::No);
+    buttonBox->button(QDialogButtonBox::Yes)->setText("接受");
+    buttonBox->button(QDialogButtonBox::No)->setText("拒绝");
+    layout->addWidget(buttonBox);
+
+    QObject::connect(buttonBox, &QDialogButtonBox::accepted, &dialog, &QDialog::accept);
+    QObject::connect(buttonBox, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
+
+    return dialog.exec() == QDialog::Accepted;
+}
 int main(int argc, char *argv[])
 {
     QApplication a(argc, argv);
-
+    a.setStyleSheet(
+        "QDialog, QMessageBox {"
+        "    background-color: #1e2a3a;" // 深蓝色背景
+        "    color: #f0f0f0;"            // 浅灰色文字
+        "}"
+        "QDialog QLabel, QMessageBox QLabel {"
+        "    color: #f0f0f0;"
+        "}"
+        "QDialog QPushButton, QMessageBox QPushButton {"
+        "    background-color: #2c3e50;"
+        "    color: white;"
+        "    border: 1px solid #5a6e7a;"
+        "    padding: 5px 10px;"
+        "    min-width: 70px;"
+        "}"
+        "QDialog QPushButton:hover, QMessageBox QPushButton:hover {"
+        "    background-color: #3a5a6e;"
+        "}"
+        "QDialog QPushButton:pressed, QMessageBox QPushButton:pressed {"
+        "    background-color: #1a2a3a;"
+        "}"
+        "QTextEdit {"
+        "    background-color: #15232e;" // 文本编辑区深色背景
+        "    color: #e0e0e0;"
+        "    border: 1px solid #2c3e50;"
+        "}");
+    // 显示免责声明，用户拒绝则直接退出
+    if (!showDisclaimer())
+    {
+        return 0;
+    }
     // 创建 Telnet 控制台
     TelnetConsole telnetConsole;
     g_telnetConsole = &telnetConsole;

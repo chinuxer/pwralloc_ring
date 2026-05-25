@@ -56,6 +56,7 @@ public:
     QHBoxLayout *horizontalLayout_5;
     QPushButton *allocateNodeButton;
     QPushButton *releaseNodeButton;
+    QPushButton *toggleNodeEnableButton;
     QHBoxLayout *horizontalLayout_6;
     QLabel *label_6;
     QTextEdit *pileInfoTextEdit;
@@ -202,6 +203,11 @@ public:
 
         horizontalLayout_5->addWidget(releaseNodeButton);
 
+        toggleNodeEnableButton = new QPushButton(centralwidget);
+        toggleNodeEnableButton->setObjectName(QString::fromUtf8("toggleNodeEnableButton"));
+
+        horizontalLayout_5->addWidget(toggleNodeEnableButton);
+
         verticalLayout->addLayout(horizontalLayout_5);
 
         label_6 = new QLabel(centralwidget);
@@ -262,7 +268,7 @@ public:
 
     void retranslateUi(QMainWindow *MainWindow)
     {
-        MainWindow->setWindowTitle(QApplication::translate("MainWindow", "RingTopoPwrAllocator", nullptr));
+        MainWindow->setWindowTitle(QApplication::translate("MainWindow", "allocyclus", nullptr));
         label->setText(QApplication::translate("MainWindow", "\347\263\273\347\273\237\351\205\215\347\275\256", nullptr));
         label_2->setText(QApplication::translate("MainWindow", "\350\212\202\347\202\271\346\225\260\351\207\217:", nullptr));
         label_3->setText(QApplication::translate("MainWindow", "\345\205\205\347\224\265\346\241\251\346\225\260\351\207\217:", nullptr));
@@ -283,6 +289,7 @@ public:
         label_unitPower->setText(QApplication::translate("MainWindow", "单机功率:", nullptr));
         unitPowerSpinBox->setSuffix(QApplication::translate("MainWindow", " kW", nullptr));
         stopChargeButton->setText(QApplication::translate("MainWindow", "停止充电", nullptr));
+        toggleNodeEnableButton->setText(QApplication::translate("MainWindow", "可用启停", nullptr));
 
     } // retranslateUi
 };

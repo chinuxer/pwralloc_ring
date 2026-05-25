@@ -104,6 +104,8 @@ HEADERS += \
 FORMS += \
     mainwindow.ui
 
+RESOURCES += resources.qrc
+RC_ICONS = appicon.ico
 # -------------------------------------------------
 # 4. 其他平台配置 (Unix/Linux/Mac)
 # -------------------------------------------------

@@ -7,14 +7,15 @@ struct
     int head[MAXN + 1];
     int nxt[6 * MAXN + 1];
     int to[6 * MAXN + 1];
-    int tot;            /* 邻接表，最多 3n 条边 */
-    int dist[MAXN + 1]; /* 对当前起点，dist[i] 为到 i 的最短距离 */
-    int q[MAXN];        /* 手写队列，比 STL 快 */
+    int dist[MAXN + 1];    /* 对当前起点，dist[i] 为到 i 的最短距离 */
+    int q[MAXN];           /* 手写队列，比 STL 快 */
+    char locked[MAXN + 1]; /* >0 表示被锁，节点编号 1..n */
+    int tot;               /* 邻接表，最多 3n 条边 */
     int qh;
     int qt;
     int nodeCount;
     int pileCount;
-    char locked[MAXN + 1]; /* >0 表示被锁，节点编号 1..n */
+
 } config;
 
 static inline void add_edge(int u, int v)
@@ -99,6 +100,15 @@ static int getpilenode(int pileid)
     int nodeId = pileid * nodesPerPile + 1;
     return nodeId;
 }
+// 供外部调用的接口 将config.dist和config.locked的访问封装在接口内
+int get_dist(int nodeid)
+{
+    return config.dist[nodeid];
+}
+void set_dist(int nodeid, int value)
+{
+    config.dist[nodeid] = value;
+}
 void set_locked(int pileid, int nodeid)
 {
     config.locked[nodeid] = pileid; // 标记为已分配（锁定）
@@ -107,6 +117,7 @@ int get_locked(int nodeid)
 {
     return config.locked[nodeid];
 }
+
 static int find_min_dist_index(int pileid, int startid)
 {
     int min_index = -1;

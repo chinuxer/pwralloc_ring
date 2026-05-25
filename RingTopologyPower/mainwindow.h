@@ -33,11 +33,13 @@ private slots:
     void onPileSelectionChanged(int index);
     void onTopologyChanged();
     void onPriorityChanged();
+    void showAboutDialog(); // 新增：显示关于对话框
     // 手动操作测试
     void onAllocateNodeClicked();
     void onReleaseNodeClicked();
     void onSaveStateClicked();
     void onLoadStateClicked();
+    void onToggleNodeEnableClicked();
 
 private:
     void setupGraphicsScene();
